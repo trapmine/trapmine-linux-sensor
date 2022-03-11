@@ -27,7 +27,7 @@ install:
 	$(call msg,INSTALL,$@)
 	@./scripts/install.sh
 
-build-tests: $(TARGETS) $(TESTS)
+build-test: $(TARGETS) $(TESTS)
 
 $(KALBUR): | $(LIB)
 	$(call msg,KALBUR,$@)
