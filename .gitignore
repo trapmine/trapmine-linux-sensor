@@ -1,0 +1,4 @@
+.vscode/*
+cscope.*
+*.o
+*.skel.h
