@@ -9,9 +9,12 @@ The sensor may be used to build a system for detecting process infections, rever
 - Kernel compiled with CONFIG_DEBUG_INFO_BTF
 - clang >= 13.0.0
 
-## Build and Install
-> make
-> sudo make install
+## Build, Install and Run
+> make   
+     
+> sudo make install   
+    
+> sudo /opt/trapmine/agent/sensor-core
 
 ### Build tests
 > make build-test
