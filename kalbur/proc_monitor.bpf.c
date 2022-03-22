@@ -77,12 +77,12 @@
 #endif
 
 #define BPF_MAP(_name, _type, _key_type, _value_type, _max_entries)            \
-	struct bpf_map_def SEC("maps") _name = {                               \
-		.type = _type,                                                 \
-		.key_size = sizeof(_key_type),                                 \
-		.value_size = sizeof(_value_type),                             \
-		.max_entries = _max_entries,                                   \
-	};
+	struct {                                                               \
+		__uint(type, _type);                                           \
+		__uint(max_entries, _max_entries);                             \
+		__type(key, _key_type);                                        \
+		__type(value, _value_type);                                    \
+	} _name SEC(".maps");
 
 #define BPF_PERF_EVENT_ARRAY_MAP(name, value_type, max_entries)                \
 	BPF_MAP(name, BPF_MAP_TYPE_PERF_EVENT_ARRAY, u32, value_type,          \
@@ -1017,8 +1017,7 @@ generic_event_start_handler(int sys_nr)
 	return err;
 }
 
-__attribute__((always_inline)) static int
-generic_event_exit_handler(struct bpf_map_def *map)
+__attribute__((always_inline)) static int generic_event_exit_handler(void *map)
 {
 	u64 tgid_pid;
 	event_t *emeta;
@@ -1101,7 +1100,7 @@ save_mmap_base_addr(struct pt_regs *ctx, event_t *emeta, u64 tgid_pid)
 	struct proc_mmap *pm;
 	struct proc_mmap new_pm = { 0 };
 	struct proc_mmap zero_pm = { 0 };
-	struct bpf_map_def *map;
+	void *map;
 	int err;
 	u64 indx;
 
@@ -1656,8 +1655,8 @@ initialize_dump_bin(mmap_dump_buff_t *out, u64 event_time, u64 vm_base,
 
 // perf_event_output emits 4 extra bytes.
 #define PERF_EVENT_EXTRA 4
-__attribute__((always_inline)) static void
-dump_vm_region(void *ctx, struct bpf_map_def *prog_map)
+__attribute__((always_inline)) static void dump_vm_region(void *ctx,
+							  void *prog_map)
 {
 	u64 tgid_pid, vm_base, perf_out_sz;
 	long err;
@@ -1805,8 +1804,8 @@ del:
 	return;
 }
 
-__attribute__((always_inline)) static void
-call_dump_vm(void *ctx, struct bpf_map_def *prog_map)
+__attribute__((always_inline)) static void call_dump_vm(void *ctx,
+							void *prog_map)
 {
 	u32 indx, map_num;
 	u64 tgid_pid;
@@ -1916,7 +1915,7 @@ KPROG(SAVE_MMAP_FILE)(struct pt_regs *ctx)
 	struct proc_mmap new_pm = { 0 };
 	struct file *f;
 	int err;
-	struct bpf_map_def *map;
+	void *map;
 	u64 i_ino, s_magic;
 
 	tgid_pid = bpf_get_current_pid_tgid();
