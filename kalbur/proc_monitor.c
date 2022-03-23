@@ -147,6 +147,12 @@ fail:
 	return CODE_FAILED;
 }
 
+static void mark_ms_as_garbage(struct message_state *ms)
+{
+	ASSERT(ms != NULL, "mark_ms_as_garbage: ms == NULL");
+	ms->saved = 1;
+}
+
 static void consume_kernel_events(void *ctx, int cpu, void *data,
 				  unsigned int size)
 {
@@ -205,7 +211,7 @@ out:
 	return;
 
 error:
-	delete_message(head, &ms);
+	mark_ms_as_garbage(ms);
 }
 
 static void handle_lost_events(void *ctx, int cpu, __u64 lost_cnt)
