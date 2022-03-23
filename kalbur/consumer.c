@@ -559,6 +559,8 @@ static int prepare_thread_run(hashtable_t **ht, sqlite3 **database,
 	if (err) {
 		fprintf(stderr,
 			"prepare_thread_run: failed to create database connection in consumer\n");
+
+		delete_table(*ht);
 		goto error;
 	}
 
@@ -567,12 +569,17 @@ static int prepare_thread_run(hashtable_t **ht, sqlite3 **database,
 	if (err) {
 		fprintf(stderr,
 			"prepare_thread_run: failed to prepare sql statements in consumer\n");
+
+		delete_table(*ht);
+		sqlite3_close(*database);
 		goto error;
 	}
 
 	return CODE_SUCCESS;
 
 error:
+	*ht = NULL;
+	*database = NULL;
 	return CODE_FAILED;
 }
 
@@ -635,10 +642,5 @@ void *consumer(void *arg)
 	close_database(db);
 
 error:
-	if (hash_table)
-		free(hash_table);
-	if (db)
-		sqlite3_close(db);
-
 	return NULL;
 }
