@@ -1424,6 +1424,18 @@ out:
 	return err;
 }
 
+/* We have two different functions for getting the inode number of struct socket:
+ * get_inode_from_socket_alloc() and get_inode_from_socket()
+ * get_inode_from_socket() takes the inode number of the socket from socket->file->f_inode.i_ino
+ * get_inode_from_socket_alloc() takes the inode from socket_alloc.vfs_inode->i_ino
+ * The reason for these two functions is because get_inode_from_socket_alloc() is used in the
+ * security_socket_post_create() hook. At this point the struct file* member of socket has not
+ * been created, so we cannot use that to get the inode number.
+ *
+ * get_inode_from_socket() is used in hooks where the struct file* member has been created.
+ * This member is created from the same inode object as socket_alloc.vfs_inode as can be seen
+ * in the following call chain: 
+ * __sys_socket -> sock_map_fd -> sock_alloc_file -> alloc_file_pseudo */
 __attribute__((always_inline)) static unsigned long
 get_inode_from_socket_alloc(struct socket *sock)
 {
