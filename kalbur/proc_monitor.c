@@ -22,6 +22,7 @@
 #include <errno.h>
 #include <message.h>
 #include <loader.h>
+#include <message_ls.h>
 
 #define GARBAGE_COLLECT 5000
 #define GARBAGE_COLLECT_LIMIT (GARBAGE_COLLECT * 3)

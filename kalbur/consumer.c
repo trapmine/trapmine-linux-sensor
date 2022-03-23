@@ -24,6 +24,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <symsearch.h>
+#include <message_ls.h>
 
 #define ASSIGN_WITH_SOFTWARE_BARRIER(lval, rval)                               \
 	do {                                                                   \
