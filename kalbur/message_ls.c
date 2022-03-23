@@ -1,3 +1,52 @@
+/*
+ * SPDX-License-Identifier: GPL-2.0-only
+ * Copyright 2021-2022 TRAPMINE, Inc.
+ *
+ * All incoming events from the kernel are placed in a generic struct, which is
+ * then placed in a message list for consumption by worker threads.
+ * This file provides all the code necessary for managing the message_list.
+ */
+
+/*
+The message list defined here is a linked list, linking incoming message_state structs
+together.
+The linked list defined here is not a generic linked list. It is written with the specific 
+requirements and considerations of this project in mind.
+
+There are two categories of threads which interact with this linked list. Each category has
+different access rules, which are defined as follows.
+
+1. main_thread
+--------------
+The first is the thread of the callback function for consuming incoming events from the kernel
+via the perf buffer. This thread will be referred to as the main_thread henceforth.
+The main_thread is responsible for
+a) constructing the message_state struct representing the event, and placing it inside the 
+linked list.
+b) managing the deallocation of these structs, during a garbage collect operation.
+
+During the garbage collect operation, the main_thread acquire locks on each worker_thread, and only
+then begins traversing the list and deleting consumed messages.
+
+On the other hand, during insertion, the main_thread does not acquire any locks. It insert the new
+message in the beginning of the linked list. 
+
+IMPORTANT: Look at link_message() function to see how it does that safely. 
+
+The reason for not acquiring locks before insertion is because locking all threads
+leads to high lock contention, causing our sensor to start dropping incoming events from the kernel.
+
+2. worker threads
+-----------------
+The second category is the worker_threads. The point of these threads is to take messages from
+the list and consume them. The messages are then marked as consumed, and thus are ready for garbage
+collection.
+The worker_threads do not modify the message list. They acquire a lock on specific messages when they 
+begin consumption, and then release the lock when done. 
+They traverse the linked list starting from the head and towards the end.
+As long as the worker_threads are running the main_thread cannot begin garbage collection.
+*/
+
 #include <err.h>
 #include <stdlib.h>
 #include <message.h>
@@ -50,7 +99,37 @@ static void unlink_message(struct msg_list *head, struct message_state *ms)
 	head->elements -= 1;
 }
 
-/* Insert new message into the beginning of the message list */
+/* This function inserts a new message into the beginning of the message list.
+ * Since the main_thread (see above) does not acquire any lock before linking
+ * in a new message, this function has to be careful to never leave the linked
+ * list in an invalid state.
+ *
+ * Lets say the following is the start state of the message list:
+ * head -> B -> C -> D -> E
+ * 'head' is the head and the alphabets are the message_state structs.
+ * For a new incoming message, the main_thread constructs a new message_state
+ * struct A, and calls link_message() to insert it into the message list.
+ *
+ * The insert must follow these step
+ *
+ * 1. A->next = B
+ * 2. B->prev = A
+ *
+ * At this point, all traversing worker_threads will see the list as follows:
+ * State:1 = head -> B -> C -> ...
+ *
+ * 3. head->first = A
+ *
+ * Now the list is State:2 = head -> A -> B -> ...
+ *
+ * The point here, is that all worker_threads must always see the list in either
+ * State:1 or State:2
+ * In order to guarantee this we must guarantee that operation 3. always happens
+ * after 2. and 1.
+ * 
+ * As such we issue a memory fence before operation 3. in order to ensure that it
+ * always takes place after the pointers of the new message (A) have been initialized
+ * correctly */
 static void link_message(struct msg_list *head, struct message_state *ms)
 {
 	struct message_state *curr_first;
