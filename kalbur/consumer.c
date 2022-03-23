@@ -25,6 +25,12 @@
 #include <errno.h>
 #include <symsearch.h>
 
+#define ASSIGN_WITH_SOFTWARE_BARRIER(lval, rval)                               \
+	do {                                                                   \
+		lval = rval;                                                   \
+		asm volatile("" : : : "memory");                               \
+	} while (0)
+
 #define STRING_NULL_PTR PER_CPU_STR_BUFFSIZE - 1
 
 #define MESSAGE_HANDLER_FUNC(name)                                             \
@@ -538,9 +544,10 @@ static int create_db_conn(char *dbname, sqlite3 **database)
 }
 
 static int prepare_thread_run(hashtable_t **ht, sqlite3 **database,
-			      pthread_id thread_id)
+			      pthread_t thread_id)
 {
-	/* initialize hashtable and sqlite db */
+	int err;
+
 	*ht = init_hashtable();
 	if (!(*ht)) {
 		fprintf(stderr,
@@ -565,14 +572,14 @@ static int prepare_thread_run(hashtable_t **ht, sqlite3 **database,
 
 	return CODE_SUCCESS;
 
-out:
+error:
 	return CODE_FAILED;
 }
 
 void *consumer(void *arg)
 {
 	int err;
-	volatile struct message_state *ms;
+	struct message_state *ms;
 	struct thread_msg *info;
 	struct msg_list *head;
 	hashtable_t *hash_table = NULL;
@@ -580,8 +587,9 @@ void *consumer(void *arg)
 
 	info = (struct thread_msg *)arg;
 
-	err = prepare_thread_run(&ht, &db, &info->thread_id);
-	JUMP_TARGET(error);
+	err = prepare_thread_run(&hash_table, &db, info->thread_id);
+	if (err == CODE_FAILED)
+		goto error;
 
 	head = info->head;
 
@@ -604,8 +612,9 @@ void *consumer(void *arg)
 		info->ready = false;
 
 		// ms should be assigned after lock is acquired
-		// thus the volatile qualifier.
-		ms = head->first;
+		// thus the software barrier to force instruction
+		// ordering.
+		ASSIGN_WITH_SOFTWARE_BARRIER(ms, head->first);
 		while (ms != NULL) {
 			if (pthread_mutex_trylock(&(ms->message_state_lock)) ==
 			    0) {
