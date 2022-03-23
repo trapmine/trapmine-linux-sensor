@@ -537,10 +537,42 @@ static int create_db_conn(char *dbname, sqlite3 **database)
 	return create_connection(dbname, database, 0);
 }
 
+static int prepare_thread_run(hashtable_t **ht, sqlite3 **database,
+			      pthread_id thread_id)
+{
+	/* initialize hashtable and sqlite db */
+	*ht = init_hashtable();
+	if (!(*ht)) {
+		fprintf(stderr,
+			"prepare_thread_run: failed to allocate space for hash_table\n");
+		goto error;
+	}
+
+	err = create_db_conn(DB_NAME, database);
+	if (err) {
+		fprintf(stderr,
+			"prepare_thread_run: failed to create database connection in consumer\n");
+		goto error;
+	}
+
+	err = prepare_sql(*database, *ht);
+	printf("[%lu] Sql prepared\n", thread_id);
+	if (err) {
+		fprintf(stderr,
+			"prepare_thread_run: failed to prepare sql statements in consumer\n");
+		goto error;
+	}
+
+	return CODE_SUCCESS;
+
+out:
+	return CODE_FAILED;
+}
+
 void *consumer(void *arg)
 {
 	int err;
-	struct message_state *ms;
+	volatile struct message_state *ms;
 	struct thread_msg *info;
 	struct msg_list *head;
 	hashtable_t *hash_table = NULL;
@@ -548,28 +580,8 @@ void *consumer(void *arg)
 
 	info = (struct thread_msg *)arg;
 
-	/* initialize hashtable and sqlite db */
-	//	hash_table = calloc(TYPED_MACRO(MAX_HASH_ENTRIES, UL), sizeof(struct entry *));
-	hash_table = init_hashtable();
-	if (!hash_table) {
-		fprintf(stderr, "Failed to allocate space for hash_table\n");
-		goto error;
-	}
-
-	err = create_db_conn(DB_NAME, &db);
-	if (err) {
-		fprintf(stderr,
-			"Failed to create database connection in consumer\n");
-		goto error;
-	}
-
-	err = prepare_sql(db, hash_table);
-	printf("[%lu] Sql prepared\n", info->thread_id);
-	if (err) {
-		fprintf(stderr,
-			"Failed to prepare sql statements in consumer\n");
-		goto error;
-	}
+	err = prepare_thread_run(&ht, &db, &info->thread_id);
+	JUMP_TARGET(error);
 
 	head = info->head;
 
@@ -592,6 +604,7 @@ void *consumer(void *arg)
 		info->ready = false;
 
 		// ms should be assigned after lock is acquired
+		// thus the volatile qualifier.
 		ms = head->first;
 		while (ms != NULL) {
 			if (pthread_mutex_trylock(&(ms->message_state_lock)) ==
