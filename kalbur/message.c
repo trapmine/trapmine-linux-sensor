@@ -406,9 +406,6 @@ static void unlink_message(struct msg_list *head, struct message_state *ms)
 	if (next != NULL)
 		next->prev_msg = prev;
 
-	// memory barrier needed here, to make sure ms is
-	// fully unlinked before its values are set to NULL.
-	__sync_synchronize();
 	ms->next_msg = NULL;
 	ms->prev_msg = NULL;
 
