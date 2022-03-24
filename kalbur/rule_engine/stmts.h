@@ -43,34 +43,34 @@ const char *CREATE_STMTS[] = {
 // #### SQL STATEMENTS ####
 // ########################
 
-char INSERT_EVENT[] = "INSERT INTO events(\
+unsigned char INSERT_EVENT[] = "INSERT INTO events(\
 				" EVENT_TIME "," TGID_PID "," SYSCALL "," COMM
-		      ") \
+			       ") \
 				VALUES(:" EVENT_TIME ",:" TGID_PID ",:" SYSCALL
-		      ",:" COMM ") RETURNING " EVENT_ID ";";
+			       ",:" COMM ") RETURNING " EVENT_ID ";";
 
-char INSERT_FILE_INFO[] = "INSERT INTO file_info(\
+unsigned char INSERT_FILE_INFO[] = "INSERT INTO file_info(\
 					" FILENAME "," INODE_NUMBER "," S_MAGIC
-			  ") \
+				   ") \
 					VALUES(:" FILENAME ",:" INODE_NUMBER
-			  ",:" S_MAGIC ")\
+				   ",:" S_MAGIC ")\
 					RETURNING " FILE_ID ";";
 
-char INSERT_PROC_MMAP[] = "INSERT INTO proc_mmap(\
+unsigned char INSERT_PROC_MMAP[] = "INSERT INTO proc_mmap(\
 					" EVENT_ID "," FILE_ID "," VM_BASE
-			  "," VM_FLAGS "," VM_PROT ", \
+				   "," VM_FLAGS "," VM_PROT ", \
 					" VM_LEN ") \
 					VALUES(:" EVENT_ID ",:" FILE_ID
-			  ",:" VM_BASE ",:" VM_FLAGS ",\
+				   ",:" VM_BASE ",:" VM_FLAGS ",\
 					:" VM_PROT ", :" VM_LEN ");";
 
-char INSERT_FORK_AND_FRIENDS_INFO[] = "INSERT INTO child_proc_info(\
+unsigned char INSERT_FORK_AND_FRIENDS_INFO[] = "INSERT INTO child_proc_info(\
 				       " EVENT_ID "," NEW_TGID_PID "," PPID
-				      "," CLONE_FLAGS ") VALUES\
+					       "," CLONE_FLAGS ") VALUES\
 					(:" EVENT_ID ",:" NEW_TGID_PID ",:" PPID
-				      ",:" CLONE_FLAGS ");";
+					       ",:" CLONE_FLAGS ");";
 
-char INSERT_PROCESS_INFO[] =
+unsigned char INSERT_PROCESS_INFO[] =
 	"INSERT INTO process_info(\
 					" EVENT_ID "," PPID "," FILE_ID "," ARGS
 	"," INTERPRETER "," UID "," GID "," EUID "," EGID "," STDIN_INODE
@@ -80,89 +80,91 @@ char INSERT_PROCESS_INFO[] =
 	",:" STDIN_TYPE ",:" STDOUT_INODE ",:" STDOUT_TYPE ",:" STDERR_INODE
 	",:" STDERR_TYPE ");";
 
-char INSERT_SOCKET_CREATE_INFO[] =
+unsigned char INSERT_SOCKET_CREATE_INFO[] =
 	"INSERT INTO socket_create_info(\
 				    " EVENT_ID "," INODE_NUMBER "," FAMILY
 	"," SOCK_TYPE ") VALUES(:" EVENT_ID ",:" INODE_NUMBER ",:" FAMILY
 	",:" SOCK_TYPE ");";
 
-char INSERT_TCP_CONN_INFO[] =
+unsigned char INSERT_TCP_CONN_INFO[] =
 	"INSERT INTO tcp_connection_info(\
 			       	" EVENT_ID "," TYPE "," SADDR "," SPORT
 	"," DADDR "," DPORT "," DIRECTION "," SOCK_INODE ") VALUES(:" EVENT_ID
 	",:" TYPE ",:" SADDR ",:" SPORT ",:" DADDR ",:" DPORT ",:" DIRECTION
 	",:" SOCK_INODE ");";
 
-char INSERT_LPE_INFO[] =
+unsigned char INSERT_LPE_INFO[] =
 	"INSERT INTO lpe(" EVENT_ID "," CALLER_RET_ADDR "," TARGET_FUNC
 	") VALUES (:" EVENT_ID ",:" CALLER_RET_ADDR ",:" TARGET_FUNC ");";
 
-char INSERT_PTRACE_INFO[] =
+unsigned char INSERT_PTRACE_INFO[] =
 	"INSERT INTO ptrace_event(" EVENT_ID "," REQUEST "," ADDR "," TARGET
 	") VALUES(:" EVENT_ID ",:" REQUEST ",:" ADDR ",:" TARGET ");";
 
-char INSERT_MODULE_INFO[] = "INSERT INTO module_load(" EVENT_ID "," FILE_ID
-			    ") VALUES(:" EVENT_ID ",:" FILE_ID ");";
+unsigned char INSERT_MODULE_INFO[] =
+	"INSERT INTO module_load(" EVENT_ID "," FILE_ID ") VALUES(:" EVENT_ID
+	",:" FILE_ID ");";
 
-char INSERT_MODPROBE_OVERWRITE_INFO[] =
+unsigned char INSERT_MODPROBE_OVERWRITE_INFO[] =
 	"INSERT INTO modprobe_overwrite_info(" EVENT_ID "," PATH_NAME
 	") VALUES(:" EVENT_ID ",:" PATH_NAME ");";
 
-char SELECT_FILE_ID[] = "SELECT * from file_info WHERE " INODE_NUMBER
-			" = :" INODE_NUMBER " and " S_MAGIC " = :" S_MAGIC ";";
+unsigned char SELECT_FILE_ID[] =
+	"SELECT * from file_info WHERE " INODE_NUMBER " = :" INODE_NUMBER
+	" and " S_MAGIC " = :" S_MAGIC ";";
 
-char SELECT_FILE_ID_PROC_INFO[] =
+unsigned char SELECT_FILE_ID_PROC_INFO[] =
 	"SELECT " FILE_ID " FROM process_info WHERE " EVENT_ID " = :" EVENT_ID
 	";";
 
-char SELECT_EVENT_SYSCALL_BY_ID[] =
+unsigned char SELECT_EVENT_SYSCALL_BY_ID[] =
 	"SELECT " SYSCALL " from events WHERE " EVENT_ID " = :" EVENT_ID ";";
 
-char SELECT_SMAGIC_BY_FILE_ID[] =
+unsigned char SELECT_SMAGIC_BY_FILE_ID[] =
 	"SELECT " S_MAGIC " from file_info WHERE " FILE_ID " = :" FILE_ID ";";
 
-char SELECT_SOCKET_BY_INODE[] =
+unsigned char SELECT_SOCKET_BY_INODE[] =
 	"SELECT " EVENT_ID " from socket_create_info WHERE " INODE_NUMBER
 	" = :" INODE_NUMBER ";";
 
-char SELECT_FILENAME_BY_FILE_ID[] =
+unsigned char SELECT_FILENAME_BY_FILE_ID[] =
 	"SELECT " FILENAME " from file_info WHERE " FILE_ID " = :" FILE_ID ";";
 
-char SELECT_STDOUT_BY_STDIN[] =
+unsigned char SELECT_STDOUT_BY_STDIN[] =
 	"SELECT " STDIN_INODE ", " EVENT_ID ", " FILE_ID
 	" from process_info WHERE " STDOUT_INODE " = :" STDOUT_INODE ";";
 
-char SELECT_STDIN_BY_STDOUT[] =
+unsigned char SELECT_STDIN_BY_STDOUT[] =
 	"SELECT " STDOUT_INODE ", " EVENT_ID
 	" from process_info WHERE " STDIN_INODE " = :" STDIN_INODE ";";
 
-char SELECT_TGID_BY_EVENT_ID[] =
+unsigned char SELECT_TGID_BY_EVENT_ID[] =
 	"SELECT " TGID_PID " from events WHERE " EVENT_ID " = :" EVENT_ID ";";
 
-char SELECT_IF_SOCK_CONN_EXISTS[] =
+unsigned char SELECT_IF_SOCK_CONN_EXISTS[] =
 	"SELECT " EVENT_ID " FROM events WHERE " TGID_PID " = :" TGID_PID
 	" and syscall = 41;";
 
-char SELECT_EVENT_IDS_BY_TGID[] =
+unsigned char SELECT_EVENT_IDS_BY_TGID[] =
 	"SELECT " EVENT_ID " FROM events where TGID_PID = :" TGID_PID
 	" and (syscall = 9 or syscall = 59);";
 
-char SELECT_VM_INFO_BY_EVENT_ID[] =
+unsigned char SELECT_VM_INFO_BY_EVENT_ID[] =
 	"SELECT " VM_BASE ", " VM_LEN ", " VM_PROT
 	" FROM proc_mmap WHERE " EVENT_ID " = :" EVENT_ID ";";
 
-char SELECT_COMM_BY_EVENT_ID[] =
+unsigned char SELECT_COMM_BY_EVENT_ID[] =
 	"SELECT " COMM " FROM events WHERE " EVENT_ID " = :" EVENT_ID ";";
 
-char SELECT_COMM[] =
+unsigned char SELECT_COMM[] =
 	"SELECT " COMM " FROM disallowed WHERE " COMM " = :" COMM ";";
 
-char BEGIN_STMT[] = "BEGIN;";
-char ROLLBACK_STMT[] = "ROLLBACK;";
-char COMMIT_STMT[] = "COMMIT;";
+unsigned char BEGIN_STMT[] = "BEGIN;";
+unsigned char ROLLBACK_STMT[] = "ROLLBACK;";
+unsigned char COMMIT_STMT[] = "COMMIT;";
 
 typedef struct stmt {
-	char *sql;
+	unsigned char *sql;
 	const size_t sql_len;
 } stmt_t;
 

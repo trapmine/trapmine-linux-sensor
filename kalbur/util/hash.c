@@ -119,12 +119,12 @@ hashtable_t *init_hashtable(void)
 		      sizeof(struct entry *));
 }
 
-void *hash_get(hashtable_t *hash_table, char *key, size_t data_size)
+void *hash_get(hashtable_t *hash_table, unsigned char *key, size_t key_size)
 {
 	struct entry *e;
 	struct key_struct ks;
 
-	ks.key_hash = crc32c_hash(key, data_size);
+	ks.key_hash = crc32c_hash(key, key_size);
 	ks.key = key;
 
 	unsigned int index = key_index(ks.key_hash);
@@ -137,12 +137,13 @@ void *hash_get(hashtable_t *hash_table, char *key, size_t data_size)
 	return e->value;
 }
 
-int hash_put(hashtable_t *hash_table, char *key, void *value, size_t data_size)
+int hash_put(hashtable_t *hash_table, unsigned char *key, void *value,
+	     size_t key_size)
 {
 	struct entry *e;
 
 	struct key_struct ks;
-	ks.key_hash = crc32c_hash(key, data_size);
+	ks.key_hash = crc32c_hash(key, key_size);
 	ks.key = key;
 
 	unsigned int index = key_index(ks.key_hash);

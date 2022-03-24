@@ -11,8 +11,9 @@
 #include "util.h"
 
 hashtable_t *init_hashtable(void);
-void *hash_get(hashtable_t *hash_table, char *key, size_t data_size);
-int hash_put(hashtable_t *hash_table, char *key, void *value, size_t data_size);
+void *hash_get(hashtable_t *hash_table, unsigned char *key, size_t key_size);
+int hash_put(hashtable_t *hash_table, unsigned char *key, void *value,
+	     size_t key_size);
 void hash_reset(hashtable_t *hash_table);
 void hash_dump(hashtable_t *hash_table);
 void delete_table(hashtable_t *hash_table);
