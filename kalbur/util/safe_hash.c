@@ -41,7 +41,7 @@ void *safe_get(safetable_t *table, unsigned char *key, size_t key_size)
 	int err;
 	void *res;
 
-	err = pthread_mutex_init(&table->lock, NULL);
+	err = pthread_mutex_lock(&table->lock);
 	if (err == 0)
 		return NULL;
 
@@ -57,7 +57,7 @@ int safe_put(safetable_t *table, unsigned char *key, void *value,
 {
 	int err;
 
-	err = pthread_mutex_init(&table->lock, NULL);
+	err = pthread_mutex_lock(&table->lock);
 	if (err == 0)
 		return CODE_FAILED;
 
@@ -72,7 +72,7 @@ void safe_reset(safetable_t *table)
 {
 	int err;
 
-	err = pthread_mutex_init(&table->lock, NULL);
+	err = pthread_mutex_lock(&table->lock);
 	if (err == 0)
 		return;
 
@@ -87,7 +87,7 @@ void delete_safetable(safetable_t *table)
 {
 	int err;
 
-	err = pthread_mutex_init(&table->lock, NULL);
+	err = pthread_mutex_lock(&table->lock);
 	if (err == 0)
 		return;
 
