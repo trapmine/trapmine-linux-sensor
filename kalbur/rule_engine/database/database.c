@@ -336,18 +336,6 @@ static int select_file_info_row(sqlite3 *db, hashtable_t *ht,
 	return file_id;
 }
 
-static size_t calc_path_sz(char **parts, uint32_t pathlen)
-{
-	size_t sz = 0;
-
-	for (uint32_t i = 0; i < pathlen; ++i) {
-		sz += strlen(parts[i]);
-	}
-
-	// We also have pathlen-1 '/'s + trailing nullbyte + buffer space
-	return sz + (pathlen * 2);
-}
-
 int insert_file_info(sqlite3 *db, hashtable_t *ht, char *string_data,
 		     struct file_info *f)
 {
