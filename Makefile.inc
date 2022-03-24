@@ -13,6 +13,7 @@ KALBUR := kalbur
 ENGINE := rule_engine
 UTIL := util
 DATABASE := database
+CONTEXT := context
 
 # Paths
 INC_DIR = $(abspath $(ROOT_DIR)/include)
@@ -22,6 +23,7 @@ TOOLS_DIR = $(abspath $(ROOT_DIR)/tools)
 KALBUR_DIR = $(abspath $(ROOT_DIR)/$(KALBUR))
 ENGINE_DIR = $(KALBUR_DIR)/$(ENGINE)
 DATABASE_DIR = $(ENGINE_DIR)/$(DATABASE)
+CONTEXT_DIR = $(ENGINE_DIR)/$(CONTEXT)
 UTIL_DIR = $(KALBUR_DIR)/$(UTIL)
 
 # Libraries
@@ -57,5 +59,5 @@ AIRBUS_SEC_FLAGS := 	-O2 							\
 			-Wl,-z,noexecstack -Wl,-z,separate-code
 
 
-INCLUDES := -I$(INC_DIR) -I$(ROOT_DIR) -I$(KALBUR_DIR) -I$(DATABASE_DIR) -I$(UTIL_DIR) -I$(UAPI)
+INCLUDES := -I$(INC_DIR) -I$(ROOT_DIR) -I$(KALBUR_DIR) -I$(DATABASE_DIR) -I$(UTIL_DIR) -I$(UAPI) -I$(CONTEXT_DIR)
 CFLAGS ?= $(IMPL_CFLAGS) $(AIRBUS_SEC_FLAGS)
