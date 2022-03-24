@@ -11,6 +11,8 @@
 #include <safe_hash.h>
 #include <err.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <errno.h>
 
 safetable_t *init_safetable(void)
 {
@@ -43,8 +45,12 @@ void *safe_get(safetable_t *table, unsigned char *key, size_t key_size)
 	void *res;
 
 	err = pthread_mutex_lock(&table->lock);
-	if (err == 0)
+	if (err != 0) {
+		fprintf(stderr,
+			"safe_get: Failed to acquire lock on table: %d\n",
+			errno);
 		return NULL;
+	}
 
 	res = hash_get(table->ht, key, key_size);
 
@@ -59,8 +65,12 @@ int safe_put(safetable_t *table, unsigned char *key, void *value,
 	int err;
 
 	err = pthread_mutex_lock(&table->lock);
-	if (err == 0)
+	if (err != 0) {
+		fprintf(stderr,
+			"safe_put: Failed to acquire lock on table: %d\n",
+			errno);
 		return CODE_FAILED;
+	}
 
 	err = hash_put(table->ht, key, value, key_size);
 
@@ -74,8 +84,12 @@ void safe_reset(safetable_t *table)
 	int err;
 
 	err = pthread_mutex_lock(&table->lock);
-	if (err == 0)
+	if (err != 0) {
+		fprintf(stderr,
+			"safe_reset: Failed to acquire lock on table: %d\n",
+			errno);
 		return;
+	}
 
 	hash_reset(table->ht);
 
@@ -89,8 +103,12 @@ void delete_safetable(safetable_t *table)
 	int err;
 
 	err = pthread_mutex_lock(&table->lock);
-	if (err == 0)
+	if (err != 0) {
+		fprintf(stderr,
+			"delete_safetable: Failed to acquire lock on table: %d\n",
+			errno);
 		return;
+	}
 
 	delete_table(table->ht);
 
