@@ -1,3 +1,11 @@
+/*
+ * SPDX-License-Identifier: GPL-2.0-only
+ * Copyright 2021-2022 TRAPMINE, Inc.
+ *
+ * This file provides the interface for managing the current
+ * running processes.
+ */
+
 #ifndef CONTEXT_MANAGER_H
 #define CONTEXT_MANAGER_H
 

@@ -1,3 +1,8 @@
+/*
+ * SPDX-License-Identifier: GPL-2.0-only
+ * Copyright 2021-2022 TRAPMINE, Inc.
+ */
+
 #ifndef ENGINE_H
 #define ENGINE_H
 #include <safe_hash.h>

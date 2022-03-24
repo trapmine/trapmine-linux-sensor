@@ -1,3 +1,10 @@
+/*
+ * SPDX-License-Identifier: GPL-2.0-only
+ * Copyright 2021-2022 TRAPMINE, Inc.
+ *
+ * This file contains code for populating the event data into the process context.
+ */
+
 #include "populate.h"
 #include <err.h>
 #include <string.h>

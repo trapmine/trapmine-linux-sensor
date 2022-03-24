@@ -1,3 +1,10 @@
+/*
+ * SPDX-License-Identifier: GPL-2.0-only
+ * Copyright 2021-2022 TRAPMINE, Inc.
+ *
+ * This file contains code for manage the context of the current running processes
+ */
+
 #include <err.h>
 #include <stdlib.h>
 #include "context_manager.h"

@@ -1,3 +1,10 @@
+/*
+ * SPDX-License-Identifier: GPL-2.0-only
+ * Copyright 2021-2022 TRAPMINE, Inc.
+ *
+ * This file contains the code for driving the rule engine
+ */
+
 #include <engine.h>
 #include <populate.h>
 #include <context_manager.h>

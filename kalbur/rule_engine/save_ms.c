@@ -1,3 +1,11 @@
+/*
+ * SPDX-License-Identifier: GPL-2.0-only
+ * Copyright 2021-2022 TRAPMINE, Inc.
+ * 
+ * This file provides the code for saving a completed message_state struct
+ * into the database.
+ */
+
 #include <database.h>
 #include <save_ms.h>
 #include <symsearch.h>
