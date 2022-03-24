@@ -14,13 +14,13 @@ IDIRAFTER = --include-directory-after
 SUBCLEAN = $(addsuffix .clean,$(SUPPORT))
 BPFTOOL=$(TOOLS_DIR)/bpftool
 
-SUPPORT = $(UTIL_DIR) $(DATABASE_DIR)
+SUPPORT = $(UTIL_DIR) $(ENGINE_DIR)
 HASH = $(UTIL_DIR)/hash.o
 SAFE = $(UTIL_DIR)/safe_hash.o
 SYMSEARCH = $(UTIL_DIR)/symsearch.o
 HELPERS_FN = $(UTIL_DIR)/helpers.o
 
-RULE_ENGINE = $(DATABASE_DIR)/database.o $(DATABASE_DIR)/rules.o $(DATABASE_DIR)/notifier.o
+RULE_ENGINE = $(DATABASE_DIR)/database.o $(DATABASE_DIR)/rules.o $(DATABASE_DIR)/notifier.o $(ENGINE_DIR)/engine.o
 HELPERS = $(HASH) $(RULE_ENGINE) $(SYMSEARCH) $(HELPERS_FN) $(SAFE)
 SQLITE3 = $(INC_DIR)/sqlite3.o
 
