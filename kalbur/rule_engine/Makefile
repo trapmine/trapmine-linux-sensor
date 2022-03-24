@@ -5,8 +5,9 @@ include $(ROOT_DIR)/Makefile.inc
 DATABASE := database
 CONTEXT := context
 ENGINE := engine
+SAVE_MS := save_ms
 
-all: $(DATABASE) $(CONTEXT) $(ENGINE).o
+all: $(DATABASE) $(CONTEXT) $(ENGINE).o $(SAVE_MS).o
 
 $(DATABASE):
 	$(call msg,DATABASE,$@)
@@ -19,6 +20,10 @@ $(CONTEXT):
 $(ENGINE).o: $(ENGINE).c $(ENGINE).h
 	$(call msg,ENGINE,$@)
 	$(Q)$(CC) $(CFLAGS) $(INCLUDES) -c $(ENGINE).c -o $@
+
+$(SAVE_MS).o: $(SAVE_MS).c $(SAVE_MS).h
+	$(call msg,SAVE_MS,$@)
+	$(Q)$(CC) $(CFLAGS) -DAPPLY_ASSERT $(INCLUDES) -c $(SAVE_MS).c -o $@
 
 clean:
 	$(call, msg,CLEAN)
