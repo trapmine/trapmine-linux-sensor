@@ -26,6 +26,8 @@ struct message_state;
 #define MESSAGE_STRING_SZ(ms)                                                  \
 	(GET_STRUCT_FIELD(ms, struct message_state, str_data).str_size)
 
+#define PTR_TO_STRING_DATA(ms, off) (&(((char *)MESSAGE_STRING(ms))[off]))
+
 #define MESSAGE_MMAP(ms)                                                       \
 	(GET_STRUCT_FIELD(ms, struct message_state, mmap_data).mmap)
 
