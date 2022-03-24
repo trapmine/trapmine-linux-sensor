@@ -10,8 +10,9 @@ else
 endif
 
 KALBUR := kalbur
-DATABASE := rule_engine
+ENGINE := rule_engine
 UTIL := util
+DATABASE := database
 
 # Paths
 INC_DIR = $(abspath $(ROOT_DIR)/include)
@@ -19,7 +20,8 @@ LIB_DIR = $(abspath $(ROOT_DIR)/third_party)
 BUILD_DIR = $(abspath $(ROOT_DIR)/build)
 TOOLS_DIR = $(abspath $(ROOT_DIR)/tools)
 KALBUR_DIR = $(abspath $(ROOT_DIR)/$(KALBUR))
-DATABASE_DIR = $(KALBUR_DIR)/$(DATABASE)
+ENGINE_DIR = $(KALBUR_DIR)/$(ENGINE)
+DATABASE_DIR = $(ENGINE_DIR)/$(DATABASE)
 UTIL_DIR = $(KALBUR_DIR)/$(UTIL)
 
 # Libraries

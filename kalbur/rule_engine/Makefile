@@ -3,28 +3,15 @@ ROOT_DIR := ../..
 include $(ROOT_DIR)/Makefile.inc
 
 DATABASE := database
-RULES := rules
-NOTIFIER := notifier
-HEADER_DEPENDENCIES := stmts.h schema.h helper_defs.h
 
-all: $(DATABASE).o $(RULES).o $(NOTIFIER).o
+all: $(DATABASE)
 
-INC := $(INCLUDES)
-
-$(NOTIFIER).o: $(NOTIFIER).c $(NOTIFIER).h
-	$(call msg,CC,$@)
-	$(Q)$(CC) $(CFLAGS) $(INCLUDES) -c $(NOTIFIER).c -o $@
-
-$(RULES).o: $(RULES).c $(RULES).h
-	$(call msg,CC,$@)
-	$(Q)$(CC) $(CFLAGS) $(INC) -c $(RULES).c -o $@
-
-$(DATABASE).o: $(DATABASE).c $(DATABASE).h $(HEADER_DEPENDENCIES)
-	$(call msg,CC,$@)
-	$(Q)$(CC) $(CFLAGS) $(INCLUDES) -c $(DATABASE).c -o $@
-
-.PHONY: clean
+$(DATABASE):
+	$(call msg,DATABASE,$@)
+	$(Q)$(MAKE) -C $(DATABASE_DIR) all
 
 clean:
-	$(Q)rm -f *.o
+	$(call, msg,CLEAN)
+	$(Q)$(MAKE) -C $(DATABASE_DIR) clean
 
+.PHONY: $(DATABASE)
