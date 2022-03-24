@@ -22,6 +22,8 @@ struct connections {
 	struct tcp_ipv6_info *tcp6;
 };
 
+// TODO: Add open files
+// TODO: Add current working directory
 struct process_context {
 	pthread_mutex_t ctx_lock;
 	uint64_t tgid_pid;

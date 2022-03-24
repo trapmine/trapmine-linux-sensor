@@ -9,9 +9,9 @@
 #include <stdlib.h>
 #include "context_manager.h"
 #include "populate.h"
+#include <stdio.h>
 
-// The key of a process is the crc32 hash of its
-// tgid_pid and comm
+// The key of a process is the crc32_hash(event_time, tgid_pid, comm)
 #define CONTEXT_KEY_LEN 2 * sizeof(uint64_t) + TASK_COMM_LEN
 
 static int try_lock_context(struct process_context *ctx)
@@ -75,7 +75,8 @@ static int get_process_context(safetable_t *ht, struct message_state *ms,
 		// Since events maybe consumed out of order, we may
 		// receive an event for a process whose context is
 		// not yet created. In this case we retry later.
-		if (eh->syscall_nr != SYS_EXECVE) {
+		if (!((eh->syscall_nr == SYS_EXECVE) ||
+		      IS_FORK_OR_FRIENDS(eh->syscall_nr))) {
 			err = CODE_RETRY;
 			goto error;
 		}
@@ -132,6 +133,11 @@ int manage_process_context(safetable_t *ht, struct message_state *ms)
 
 	ASSERT(ms != NULL, "add_event_context: ms == NULL");
 	ASSERT(ms->complete == 1, "add_event_context: ms->complete == 0");
+
+	if (ht == NULL) {
+		fprintf(stderr,
+			"manage_process_context: hashtable for process context is NULL\n");
+	}
 
 	err = get_process_context(ht, ms, &ctx);
 	if (err != CODE_SUCCESS)
