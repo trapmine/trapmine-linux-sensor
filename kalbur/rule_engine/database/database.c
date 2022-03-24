@@ -22,6 +22,7 @@
 #include <sys/socket.h> // AF_INET, AF_INET6
 #include <arpa/inet.h>
 #include <sys/mman.h>
+#include <helpers.h>
 
 #include "database.h"
 
@@ -347,56 +348,6 @@ static size_t calc_path_sz(char **parts, uint32_t pathlen)
 	return sz + (pathlen * 2);
 }
 
-static char *build_file_name(char *file_path, uint32_t pathlen)
-{
-	char **parts;
-	int marker;
-	char *filename;
-	char *dest;
-	size_t src_len, path_sz;
-
-	parts = (char **)malloc(pathlen * sizeof(char *));
-	if (parts == NULL)
-		goto out;
-
-	marker = 0;
-	for (int i = (int)pathlen - 1; i >= 0; i--) {
-		parts[i] = (char *)&file_path[marker];
-		while (file_path[marker] != 0)
-			marker++;
-
-		marker++;
-	}
-
-	path_sz = calc_path_sz(parts, pathlen);
-
-	filename = (char *)calloc(sizeof(char), path_sz);
-	if (filename == NULL) {
-		fprintf(stderr, "build_file_name: malloc failed\n");
-		goto out;
-	}
-
-	dest = filename;
-	if (pathlen > 1) {
-		*dest = '/';
-		dest++;
-	}
-	for (uint32_t i = 0; i < pathlen; ++i) {
-		src_len = strlen(parts[i]);
-		dest = memcpy(dest, parts[i], src_len);
-		dest = dest + src_len;
-		*dest = '/';
-		dest++;
-	}
-	dest = dest - sizeof(char);
-	*dest = 0;
-
-out:
-	if (parts != NULL)
-		free(parts);
-	return filename;
-}
-
 int insert_file_info(sqlite3 *db, hashtable_t *ht, char *string_data,
 		     struct file_info *f)
 {
@@ -424,8 +375,8 @@ int insert_file_info(sqlite3 *db, hashtable_t *ht, char *string_data,
 	if (f->file_offset < LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE)) {
 		ASSERT(string_data[LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE)] == 0,
 		       "string_data[LAST_NULL_BYTE] != 0");
-		filename = build_file_name(&string_data[f->file_offset],
-					   f->path_len);
+		filename = build_filename_from_event(
+			&string_data[f->file_offset], f->path_len);
 		if (filename != NULL) {
 			SQLITE3_BIND_STR("insert_file_info", text, FILENAME,
 					 filename);
@@ -506,43 +457,6 @@ int insert_mmap_info(sqlite3 *db, hashtable_t *ht, struct proc_mmap *pm,
 //	return event_id;
 //}
 
-static char *build_args_str(char *args_data, uint32_t argv_off, uint32_t nargv)
-{
-	uint32_t cnt, indx;
-	size_t arg_sz;
-	char *args = NULL;
-	char *dest = NULL;
-	char *str = NULL;
-
-	for (indx = argv_off, cnt = 0; cnt < nargv; indx++) {
-		if (indx >= PER_CPU_STR_BUFFSIZE) {
-			ASSERT(indx < PER_CPU_STR_BUFFSIZE,
-			       "build_args_str: indx >= PER_CPU_STR_BUFFSIZE");
-			return NULL;
-		}
-		if (args_data[indx] == 0)
-			cnt++;
-	}
-
-	arg_sz = indx - argv_off;
-	args = calloc(arg_sz, sizeof(char));
-	if (args != NULL) {
-		dest = args;
-		str = &(args_data[argv_off]);
-		for (uint32_t i = 0; i < nargv; ++i) {
-			args = strcat(args, str);
-			dest = strchr(args, '\0');
-			*dest = ',';
-			str = strchr(str, '\0');
-			str++;
-		}
-
-		return args;
-	} else {
-		return NULL;
-	}
-}
-
 int insert_proc_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 		     int event_id, int file_id)
 {
@@ -596,7 +510,7 @@ int insert_proc_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 		sqlite3_bind_null(ppStmt, sqlite3_bind_parameter_index(
 						  ppStmt, PARAM_HOLDER(ARGS)));
 	} else {
-		args = build_args_str(string_data, argv_off, pinfo->args.nargv);
+		args = build_cmdline(string_data, argv_off, pinfo->args.nargv);
 		if (args != NULL)
 			SQLITE3_BIND_STR("insert_proc_info", text, ARGS, args);
 		else
