@@ -489,12 +489,203 @@ START_TEST(test_delete_message__SUCCESS)
 
 	head = delete_message_list(head);
 }
+END_TEST
+
+START_TEST(test_transition_message_complete_SUCCESS)
+{
+	struct message_state *ms;
+	ms = allocate_message_struct(SYS_EXECVE, 0);
+
+	ck_assert(ms->progress == 0);
+	transition_ms_progress(ms, MS_COMPLETE, CODE_SUCCESS);
+	ck_assert(IS_MS_COMPLETE(ms) == 1);
+}
+END_TEST
+
+START_TEST(test_transition_message_complete_FAIL_with_CODE_FAILED)
+{
+	struct message_state *ms;
+	ms = allocate_message_struct(SYS_EXECVE, 0);
+
+	ck_assert(ms->progress == 0);
+	transition_ms_progress(ms, MS_COMPLETE, CODE_FAILED);
+	ck_assert(IS_MS_COMPLETE(ms) == 0);
+}
+END_TEST
+
+START_TEST(test_transition_message_complete_FAIL_with_CODE_RETRY)
+{
+	struct message_state *ms;
+	ms = allocate_message_struct(SYS_EXECVE, 0);
+
+	ck_assert(ms->progress == 0);
+	transition_ms_progress(ms, MS_COMPLETE, CODE_FAILED);
+	ck_assert(IS_MS_COMPLETE(ms) == 0);
+}
+END_TEST
+
+START_TEST(test_transition_db_saved_SUCCESS)
+{
+	struct message_state *ms;
+	ms = allocate_message_struct(SYS_EXECVE, 0);
+
+	ck_assert(ms->progress == 0);
+	transition_ms_progress(ms, MS_COMPLETE, CODE_SUCCESS);
+	ck_assert_msg(IS_MS_COMPLETE(ms) != 0, "ms->progress != complete");
+
+	transition_ms_progress(ms, MS_DB_SAVED, CODE_SUCCESS);
+	ck_assert_msg(IS_MS_DB_SAVED(ms) != 0, "ms->progress != db_saved");
+}
+END_TEST
+
+START_TEST(test_transition_db_saved_CODE_FAILED_to_gc)
+{
+	struct message_state *ms;
+	ms = allocate_message_struct(SYS_EXECVE, 0);
+
+	ck_assert(ms->progress == 0);
+	transition_ms_progress(ms, MS_COMPLETE, CODE_SUCCESS);
+	ck_assert(IS_MS_COMPLETE(ms) != 0);
+
+	transition_ms_progress(ms, MS_DB_SAVED, CODE_FAILED);
+	ck_assert_msg(IS_MS_DB_SAVED(ms) == 0, "ms->progress == db_saved");
+	ck_assert_msg(IS_MS_GC(ms) != 0, "ms->progress != gc");
+}
+END_TEST
+
+START_TEST(test_transition_db_saved_CODE_RETRY_no_transition_to_gc)
+{
+	struct message_state *ms;
+	ms = allocate_message_struct(SYS_EXECVE, 0);
+
+	ck_assert(ms->progress == 0);
+	transition_ms_progress(ms, MS_COMPLETE, CODE_SUCCESS);
+	ck_assert(IS_MS_COMPLETE(ms) != 0);
+
+	transition_ms_progress(ms, MS_DB_SAVED, CODE_RETRY);
+	ck_assert(IS_MS_DB_SAVED(ms) == 0);
+	ck_assert(IS_MS_GC(ms) == 0);
+}
+END_TEST
+
+START_TEST(test_transition_context_CODE_SUCCES)
+{
+	struct message_state *ms;
+	ms = allocate_message_struct(SYS_EXECVE, 0);
+
+	ck_assert(ms->progress == 0);
+	transition_ms_progress(ms, MS_COMPLETE, CODE_SUCCESS);
+	ck_assert(IS_MS_COMPLETE(ms) != 0);
+
+	transition_ms_progress(ms, MS_CTX_SAVED, CODE_SUCCESS);
+	ck_assert_msg(IS_MS_CTX_SAVED(ms) != 0, "ms->progress != ctx_saved");
+
+	ck_assert_msg(IS_MS_GC(ms) == 0, "ms->progress == gc");
+}
+
+START_TEST(test_transition_context_CODE_RETRY)
+{
+	struct message_state *ms;
+	ms = allocate_message_struct(SYS_EXECVE, 0);
+
+	ck_assert(ms->progress == 0);
+	transition_ms_progress(ms, MS_COMPLETE, CODE_SUCCESS);
+	ck_assert(IS_MS_COMPLETE(ms) != 0);
+
+	transition_ms_progress(ms, MS_CTX_SAVED, CODE_RETRY);
+	ck_assert_msg(IS_MS_CTX_SAVED(ms) == 0, "ms->progress != ctx_saved");
+
+	ck_assert_msg(IS_MS_GC(ms) == 0, "ms->progress == gc");
+}
+
+START_TEST(test_transition_context_CODE_FAILED_transition_to_ignored)
+{
+	struct message_state *ms;
+	ms = allocate_message_struct(SYS_EXECVE, 0);
+
+	ck_assert(ms->progress == 0);
+	transition_ms_progress(ms, MS_COMPLETE, CODE_SUCCESS);
+	ck_assert(IS_MS_COMPLETE(ms) != 0);
+
+	transition_ms_progress(ms, MS_CTX_SAVED, CODE_FAILED);
+	ck_assert_msg(IS_MS_CTX_SAVED(ms) == 0, "ms->progress != ctx_saved");
+	ck_assert_msg(IS_MS_IGNORE_CTX_SAVE(ms) == 1,
+		      "ms->progress != ignore_ctx");
+
+	ck_assert_msg(IS_MS_GC(ms) == 0, "ms->progress == gc");
+}
+
+START_TEST(test_transition_end_state_COMPLETE)
+{
+	struct message_state *ms;
+	ms = allocate_message_struct(SYS_EXECVE, 0);
+
+	ck_assert(ms->progress == 0);
+	transition_ms_progress(ms, MS_COMPLETE, CODE_SUCCESS);
+	ck_assert(IS_MS_COMPLETE(ms) != 0);
+
+	ck_assert(IS_MS_GC(ms) == 0);
+}
+
+START_TEST(test_transition_end_state_MS_DB_SAVED_not_set)
+{
+	struct message_state *ms;
+	ms = allocate_message_struct(SYS_EXECVE, 0);
+
+	ck_assert(ms->progress == 0);
+	transition_ms_progress(ms, MS_COMPLETE, CODE_SUCCESS);
+	ck_assert(IS_MS_COMPLETE(ms) != 0);
+
+	transition_ms_progress(ms, MS_CTX_SAVED, CODE_SUCCESS);
+	ck_assert(IS_MS_GC(ms) == 0);
+
+	transition_ms_progress(ms, MS_CTX_SAVED, CODE_FAILED);
+	ck_assert(IS_MS_GC(ms) == 0);
+}
+
+START_TEST(test_transition_end_state_MS_DB_SAVED_set_CTX_SAVED_set)
+{
+	struct message_state *ms;
+	ms = allocate_message_struct(SYS_EXECVE, 0);
+
+	ck_assert(ms->progress == 0);
+	transition_ms_progress(ms, MS_COMPLETE, CODE_SUCCESS);
+	ck_assert(IS_MS_COMPLETE(ms) != 0);
+
+	transition_ms_progress(ms, MS_DB_SAVED, CODE_SUCCESS);
+	ck_assert(IS_MS_DB_SAVED(ms) != 0);
+
+	transition_ms_progress(ms, MS_CTX_SAVED, CODE_SUCCESS);
+	ck_assert(IS_MS_CTX_SAVED(ms) != 0);
+
+	ck_assert(IS_MS_GC(ms) == 1);
+}
+
+START_TEST(test_transition_end_state_MS_DB_SAVED_set_CTX_IGNORE_set)
+{
+	struct message_state *ms;
+	ms = allocate_message_struct(SYS_EXECVE, 0);
+
+	ck_assert(ms->progress == 0);
+	transition_ms_progress(ms, MS_COMPLETE, CODE_SUCCESS);
+	ck_assert(IS_MS_COMPLETE(ms) != 0);
+
+	transition_ms_progress(ms, MS_DB_SAVED, CODE_SUCCESS);
+	ck_assert(IS_MS_DB_SAVED(ms) != 0);
+
+	transition_ms_progress(ms, MS_CTX_SAVED, CODE_FAILED);
+	ck_assert(IS_MS_CTX_SAVED(ms) == 0);
+	ck_assert(IS_MS_IGNORE_CTX_SAVE(ms) != 0);
+
+	ck_assert(IS_MS_GC(ms) == 1);
+}
 
 Suite *message_list_suite(void)
 {
 	Suite *s;
 	TCase *tc_link_S, *tc_get_message_S;
 	TCase *tc_unlink_S, *tc_delete_message_S;
+	TCase *tc_transition_message;
 
 	s = suite_create("Message List");
 
@@ -518,10 +709,41 @@ Suite *message_list_suite(void)
 	tc_delete_message_S = tcase_create("Delete message success");
 	tcase_add_test(tc_delete_message_S, test_delete_message__SUCCESS);
 
+	/* Transition message */
+	tc_transition_message = tcase_create("Transtion message");
+	tcase_add_test(tc_transition_message,
+		       test_transition_message_complete_SUCCESS);
+	tcase_add_test(tc_transition_message,
+		       test_transition_message_complete_FAIL_with_CODE_FAILED);
+	tcase_add_test(tc_transition_message,
+		       test_transition_message_complete_FAIL_with_CODE_RETRY);
+	tcase_add_test(tc_transition_message, test_transition_db_saved_SUCCESS);
+	tcase_add_test(tc_transition_message,
+		       test_transition_db_saved_CODE_FAILED_to_gc);
+	tcase_add_test(tc_transition_message,
+		       test_transition_db_saved_CODE_RETRY_no_transition_to_gc);
+	tcase_add_test(tc_transition_message,
+		       test_transition_context_CODE_SUCCES);
+	tcase_add_test(tc_transition_message,
+		       test_transition_context_CODE_SUCCES);
+	tcase_add_test(
+		tc_transition_message,
+		test_transition_context_CODE_FAILED_transition_to_ignored);
+	tcase_add_test(tc_transition_message,
+		       test_transition_end_state_COMPLETE);
+	tcase_add_test(tc_transition_message,
+		       test_transition_end_state_MS_DB_SAVED_not_set);
+	tcase_add_test(tc_transition_message,
+		       test_transition_end_state_MS_DB_SAVED_set_CTX_SAVED_set);
+	tcase_add_test(
+		tc_transition_message,
+		test_transition_end_state_MS_DB_SAVED_set_CTX_IGNORE_set);
+
 	suite_add_tcase(s, tc_link_S);
 	suite_add_tcase(s, tc_get_message_S);
 	suite_add_tcase(s, tc_unlink_S);
 	suite_add_tcase(s, tc_delete_message_S);
+	suite_add_tcase(s, tc_transition_message);
 
 	return s;
 }

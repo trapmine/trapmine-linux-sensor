@@ -199,7 +199,7 @@ struct message_state *get_message(struct msg_list *head,
 
 		// Link saved messages together
 		// so freeing later is simpler
-		if (FREEABLE(ms)) {
+		if (IS_MS_GC(ms)) {
 			if (prev_gc == NULL)
 				prev_gc = ms;
 			else {
@@ -226,7 +226,7 @@ void garbage_collect(struct msg_list *head, char *caller)
 	struct message_state *tmp;
 
 	ms = head->first;
-	while (!TO_GC(ms))
+	while (!IS_MS_GC(ms))
 		ms = ms->next_msg;
 
 	if (ms == NULL)

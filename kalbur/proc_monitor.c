@@ -186,6 +186,9 @@ static void consume_kernel_events(void *ctx, int cpu, void *data,
 	if (construct_message_state(ms, &eh_local, data, size) == CODE_FAILED)
 		goto error;
 
+	// TODO: move this into another functon. Change force logic. Instead of blocking
+	// stop broadcasting until attempt_lock_threads succeeds
+	// Once garbage collect has been called set 'force' bool to false again
 	if (head->elements > GARBAGE_COLLECT) {
 		// acquire lock on msg_list, if all threads are sleeping
 		err = attempt_lock_threads();
@@ -204,8 +207,13 @@ static void consume_kernel_events(void *ctx, int cpu, void *data,
 		}
 	}
 
-	if (ms->pred(ms)) {
-		ms->complete = 1;
+	//if (ms->pred(ms)) {
+	//	ms->complete = 1;
+	//	broadcast_complete();
+	//}
+
+	transition_ms_progress(ms, MS_COMPLETE, ms->pred(ms));
+	if (IS_MS_COMPLETE(ms)) {
 		broadcast_complete();
 	}
 
