@@ -67,7 +67,7 @@ static struct process_context *create_process_context(struct message_state *ms)
 }
 
 // returns CODE_FAILED if we could not create new context, or place it in hashtable.
-static int get_process_context(hashtable_t *ht, struct message_state *ms,
+static int get_process_context(safetable_t *ht, struct message_state *ms,
 			       struct process_context **ctx)
 {
 	int err;
@@ -77,11 +77,8 @@ static int get_process_context(hashtable_t *ht, struct message_state *ms,
 
 	eh = (struct probe_event_header *)ms->primary_data;
 	ASSERT(eh != NULL, "get_process_context: eh == NULL");
-	//	if (eh == NULL) {
-	//		return CODE_RETRY;
-	//	}
 
-	*ctx = (struct process_context *)hash_get(ht, (unsigned char *)eh,
+	*ctx = (struct process_context *)safe_get(ht, (unsigned char *)eh,
 						  CONTEXT_KEY_LEN);
 	if (*ctx == NULL) {
 		// Since events maybe consumed out of order, we may
@@ -98,7 +95,7 @@ static int get_process_context(hashtable_t *ht, struct message_state *ms,
 		}
 
 		// save context in hashtable
-		err = hash_put(ht, (unsigned char *)eh, *ctx, CONTEXT_KEY_LEN);
+		err = safe_put(ht, (unsigned char *)eh, *ctx, CONTEXT_KEY_LEN);
 		if (err != CODE_SUCCESS) {
 			err = CODE_FAILED;
 			goto error;
