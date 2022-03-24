@@ -84,11 +84,19 @@ struct mmap_dump_fmt {
 			       "SYSCALL_PRIMARY_STRUCT: Invalid syscall");     \
 	} while (0)
 
-#define FREEABLE(ms) ((ms->saved == 1) || (ms->discard == 1))
+typedef int (*message_complete_predicate)(struct message_state *);
 
-#define TO_GC(ms) ((ms != NULL) && (FREEABLE(ms)))
+#define MS_COMPLETE (1UL << 0)
+#define MS_CTX_SAVED (1UL << 1)
+#define MS_DB_SAVED (1UL << 2)
+#define MS_GC (1UL << 3)
+#define MS_IGNORE_CTX_SAVE (1UL << 4)
 
-typedef bool (*message_complete_predicate)(struct message_state *);
+#define IS_MS_COMPLETE(ms) (((ms->progress) & (MS_COMPLETE)) != 0)
+#define IS_MS_DB_SAVED(ms) (((ms->progress) & (MS_DB_SAVED)) != 0)
+#define IS_MS_CTX_SAVED(ms) (((ms->progress) & (MS_CTX_SAVED)) != 0)
+#define IS_MS_GC(ms) (((ms->progress) & (MS_GC)) != 0)
+#define IS_MS_IGNORE_CTX_SAVE(ms) (((ms->progress) & MS_IGNORE_CTX_SAVE) != 0)
 
 struct message_state {
 	pthread_mutex_t message_state_lock;
@@ -108,6 +116,7 @@ struct message_state {
 	struct message_state
 		*next_gc; // Optimization to quickly find struct to free
 	int cpu;
+	uint64_t progress;
 	int complete;
 	int saved;
 	int discard;
@@ -120,5 +129,7 @@ int is_legal_event(struct probe_event_header *eh);
 struct message_state *allocate_message_struct(int syscall, int cpu);
 struct probe_event_header *get_event_header(struct message_state *ms);
 void delete_message(struct message_state **ms);
+void transition_ms_progress(struct message_state *ms,
+			    uint64_t transition_target, int prog_err);
 
 #endif // MESSAGE_H

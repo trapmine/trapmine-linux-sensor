@@ -326,3 +326,86 @@ void delete_message(struct message_state **state)
 	*state = free_message(*state);
 }
 
+static void transition_progress(struct message_state *ms, uint64_t transition)
+{
+	ms->progress = ms->progress | transition;
+}
+
+static void transition_complete(struct message_state *ms, int prog_err)
+{
+	if (prog_err == CODE_SUCCESS) {
+		transition_progress(ms, MS_COMPLETE);
+	}
+}
+
+static void transition_end_state(struct message_state *ms)
+{
+	ASSERT((IS_MS_COMPLETE(ms)) == 1,
+	       "transition_end_state: ms->progress not set to completed");
+
+	if (IS_MS_GC(ms)) {
+		return;
+	}
+
+	if (IS_MS_DB_SAVED(ms)) {
+		if (IS_MS_CTX_SAVED(ms)) {
+			transition_progress(ms, MS_GC);
+			return;
+		}
+		if (IS_MS_IGNORE_CTX_SAVE(ms)) {
+			transition_progress(ms, MS_GC);
+			return;
+		}
+	}
+}
+
+static void transition_context(struct message_state *ms, int prog_err)
+{
+	ASSERT((IS_MS_COMPLETE(ms)) == 1,
+	       "transition_context: ms->progress not set to completed");
+
+	if (prog_err == CODE_SUCCESS) {
+		// process context was successfuly updated
+		transition_progress(ms, MS_CTX_SAVED);
+	} else if (prog_err == CODE_FAILED) {
+		// something irrecoverable happened. Don't bother inserting
+		// this message into context
+		transition_progress(ms, MS_IGNORE_CTX_SAVE);
+	}
+	// if prog_err == CODE_RETRY, we do not transition to next state
+
+	transition_end_state(ms);
+}
+
+static void transition_db_saved(struct message_state *ms, int prog_err)
+{
+	ASSERT((IS_MS_COMPLETE(ms)) == 1,
+	       "transition_db_saved: ms->progress not set to completed");
+
+	if (prog_err == CODE_SUCCESS) {
+		transition_progress(ms, MS_DB_SAVED);
+	} else if (prog_err == CODE_FAILED) {
+		transition_progress(ms, MS_GC);
+	}
+	// if prog_err == CODE_RETRY, we do not transition to next state
+
+	transition_end_state(ms);
+}
+
+void transition_ms_progress(struct message_state *ms,
+			    uint64_t transition_target, int prog_err)
+{
+	switch (transition_target) {
+	case MS_COMPLETE:
+		transition_complete(ms, prog_err);
+		break;
+	case MS_CTX_SAVED:
+		transition_context(ms, prog_err);
+		break;
+	case MS_DB_SAVED:
+		transition_db_saved(ms, prog_err);
+		break;
+	default:
+		return;
+	}
+}

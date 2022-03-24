@@ -66,7 +66,7 @@ static inline void set_discard(struct message_state *ms)
 
 static int consume_ms(struct message_state *ms)
 {
-	return ms->complete && !FREEABLE(ms);
+	return IS_MS_COMPLETE(ms) && !IS_MS_GC(ms);
 }
 
 static int save_mmap_helper(sqlite3 *db, hashtable_t *ht, struct proc_mmap *pm,
@@ -219,7 +219,7 @@ MESSAGE_HANDLER_FUNC(save_fork_and_friends_event)
 	err = commit_transaction(db, ht);
 	if (err == CODE_FAILED)
 		fprintf(stderr,
-			"save_execve_event: failed to commit transaction: %s\n",
+			"save_fork_and_friends_event: failed to commit transaction: %s\n",
 			sqlite3_errmsg(db));
 
 	HANDLE_FAIL_JUMP(err);
