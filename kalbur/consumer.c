@@ -25,6 +25,7 @@
 #include <errno.h>
 #include <symsearch.h>
 #include <message_ls.h>
+#include <engine.h>
 
 #define ASSIGN_WITH_SOFTWARE_BARRIER(lval, rval)                               \
 	do {                                                                   \
@@ -584,6 +585,11 @@ error:
 	return CODE_FAILED;
 }
 
+static void invoke_engine(struct message_state *ms, safetable_t *table)
+{
+	process_message(ms, table);
+}
+
 void *consumer(void *arg)
 {
 	int err;
@@ -627,11 +633,12 @@ void *consumer(void *arg)
 			if (pthread_mutex_trylock(&(ms->message_state_lock)) ==
 			    0) {
 				if (consume_ms(ms)) {
-					err = save_msg(db, hash_table, ms);
-					if (err == CODE_SUCCESS) {
-						set_saved(ms);
-					} else if (err == CODE_FAILED)
-						set_discard(ms);
+					invoke_engine(ms, info->safe_hashtable);
+					//	err = save_msg(db, hash_table, ms);
+					//	if (err == CODE_SUCCESS) {
+					//		set_saved(ms);
+					//	} else if (err == CODE_FAILED)
+					//		set_discard(ms);
 				}
 				pthread_mutex_unlock(&(ms->message_state_lock));
 			}
