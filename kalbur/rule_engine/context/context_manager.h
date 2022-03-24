@@ -1,9 +1,9 @@
-#ifndef CONTEXT_H
-#define CONTEXT_H
+#ifndef CONTEXT_MANAGER_H
+#define CONTEXT_MANAGER_H
 
 #include <sys/types.h>
-#include <missing_defs.h>
 #include <safe_hash.h>
+#include <syscall_defs.h>
 #include <message.h>
 #include <events.h>
 #include <pthread.h>
