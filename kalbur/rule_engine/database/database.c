@@ -23,7 +23,6 @@
 #include <arpa/inet.h>
 #include <sys/mman.h>
 #include <helpers.h>
-
 #include "database.h"
 
 static void delete_db_file(char *dbname)
@@ -206,7 +205,7 @@ int prepare_sql(sqlite3 *db, hashtable_t *hash_table)
 
 		err = hash_put(hash_table, SQL_STMTS[i].sql, ppStmt,
 			       SQL_STMTS[i].sql_len);
-		if (err) {
+		if (err == CODE_FAILED) {
 			fprintf(stderr,
 				"Failed to place prepared statement in hashmap.\n");
 			return CODE_FAILED;

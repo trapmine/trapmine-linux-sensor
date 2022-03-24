@@ -1,5 +1,6 @@
 #ifndef MESSAGE_LS_H
 #define MESSAGE_LS_H
+#include <events.h>
 
 struct msg_list *initialize_msg_list(void);
 void *delete_message_list(struct msg_list *head);
