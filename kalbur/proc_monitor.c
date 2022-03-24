@@ -23,6 +23,7 @@
 #include <message.h>
 #include <loader.h>
 #include <message_ls.h>
+#include <safe_hash.h>
 
 #define GARBAGE_COLLECT 5000
 #define GARBAGE_COLLECT_LIMIT (GARBAGE_COLLECT * 3)
@@ -258,7 +259,12 @@ static void shutdown_threads(void)
 	return;
 }
 
-static void initialize_thread_ls(struct msg_list *head)
+static safetable_t *initialize_safetable(void)
+{
+	return init_safetable();
+}
+
+static void initialize_thread_ls(struct msg_list *head, safetable_t *table)
 {
 	size_t i;
 	int err;
@@ -273,6 +279,7 @@ static void initialize_thread_ls(struct msg_list *head)
 			exit(1);
 		}
 
+		threads[i]->safe_hashtable = table;
 		threads[i]->ready = false;
 		threads[i]->die = false;
 		threads[i]->head = head;
@@ -305,6 +312,7 @@ int main(int argc, char **argv)
 	struct proc_monitor_bpf *skel = NULL;
 	struct msg_list *head = NULL;
 	struct rlimit limit = { 0 };
+	safetable_t *table;
 	int err;
 
 	/* Kill this process if parent dies */
@@ -352,7 +360,9 @@ int main(int argc, char **argv)
 	if (head == NULL)
 		goto out;
 
-	initialize_thread_ls(head);
+	// initialize safetable
+	table = initialize_safetable();
+	initialize_thread_ls(head, table);
 
 	init_threads();
 

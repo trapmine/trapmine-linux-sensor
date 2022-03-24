@@ -7,9 +7,10 @@
  * with a mutex.
  */
 
-#include "safe_hash.h"
-#include "hash.h"
+#include <hash.h>
+#include <safe_hash.h>
 #include <err.h>
+#include <stdlib.h>
 
 safetable_t *init_safetable(void)
 {

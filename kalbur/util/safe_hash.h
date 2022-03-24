@@ -5,8 +5,8 @@
  * The file defines the interface for a threadsafe hashmap
  */
 
-#ifndef HASH_H
-#define HASH_H
+#ifndef SAFEHASH_H
+#define SAFEHASH_H
 
 #include "util.h"
 

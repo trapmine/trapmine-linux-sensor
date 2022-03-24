@@ -7,6 +7,7 @@
 #define CONSUMER_H
 #include <pthread.h>
 #include <stdbool.h>
+#include <safe_hash.h>
 
 #define DB_NAME "/opt/trapmine/db/proc_db"
 
@@ -17,6 +18,7 @@ struct thread_msg {
 	bool ready;
 	bool die;
 	struct msg_list *head;
+	safetable_t *safe_hashtable;
 };
 
 void *consumer(void *arg);
