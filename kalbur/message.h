@@ -111,22 +111,12 @@ struct message_state {
 	int discard;
 };
 
-struct msg_list {
-	struct message_state *first;
-	struct message_state *last;
-	int elements;
-};
-
 int construct_message_state(struct message_state *ms,
 			    struct probe_event_header *eh_local, void *data,
 			    unsigned int size);
-struct message_state *get_message(struct msg_list *head,
-				  struct probe_event_header *eh_incoming,
-				  int cpu);
-void delete_message(struct msg_list *head, struct message_state **ms);
-void garbage_collect(struct msg_list *head, char *caller);
-struct msg_list *initialize_msg_list(void);
-void *delete_message_list(struct msg_list *head);
 int is_legal_event(struct probe_event_header *eh);
+struct message_state *allocate_message_struct(int syscall, int cpu);
+struct probe_event_header *get_event_header(struct message_state *ms);
+void delete_message(struct message_state **ms);
 
 #endif // MESSAGE_H

@@ -26,6 +26,7 @@ PRELIM_TARGETS = $(patsubst %.c,%.o, $(filter-out %.bpf.c, $(wildcard *.c)))
 PROC_MONITOR = proc_monitor
 LOADER = loader
 MESSAGE = message
+MESSAGE_LS = message_ls
 APPS = $(PROC_MONITOR)
 MESSAGE_CONSUMERS = consumer
 
@@ -105,6 +106,12 @@ $(SUPPORT):
 $(MESSAGE).o: $(MESSAGE).c
 	$(call msg,CC,$@)
 	$(Q)$(CC) -DAPPLY_ASSERT $(CFLAGS) $(DEBUG_FLAG) $(INCLUDES) -c $(filter %.c, $^) -o $@
+
+# Build user-space code
+$(MESSAGE_LS).o: $(MESSAGE_LS).c $(MESSAGE_LS).h
+	$(call msg,CC,$@)
+	$(Q)$(CC) -DAPPLY_ASSERT $(CFLAGS) $(DEBUG_FLAG) $(INCLUDES) -c $(filter %.c, $^) -o $@
+
 
 $(LOADER).o: $(LOADER).c $(PROC_MONITOR).skel.h
 	$(call msg,CC,$@)

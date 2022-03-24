@@ -24,6 +24,13 @@
 #include <unistd.h>
 #include <errno.h>
 #include <symsearch.h>
+#include <message_ls.h>
+
+#define ASSIGN_WITH_SOFTWARE_BARRIER(lval, rval)                               \
+	do {                                                                   \
+		lval = rval;                                                   \
+		asm volatile("" : : : "memory");                               \
+	} while (0)
 
 #define STRING_NULL_PTR PER_CPU_STR_BUFFSIZE - 1
 
@@ -537,6 +544,46 @@ static int create_db_conn(char *dbname, sqlite3 **database)
 	return create_connection(dbname, database, 0);
 }
 
+static int prepare_thread_run(hashtable_t **ht, sqlite3 **database,
+			      pthread_t thread_id)
+{
+	int err;
+
+	*ht = init_hashtable();
+	if (!(*ht)) {
+		fprintf(stderr,
+			"prepare_thread_run: failed to allocate space for hash_table\n");
+		goto error;
+	}
+
+	err = create_db_conn(DB_NAME, database);
+	if (err) {
+		fprintf(stderr,
+			"prepare_thread_run: failed to create database connection in consumer\n");
+
+		delete_table(*ht);
+		goto error;
+	}
+
+	err = prepare_sql(*database, *ht);
+	printf("[%lu] Sql prepared\n", thread_id);
+	if (err) {
+		fprintf(stderr,
+			"prepare_thread_run: failed to prepare sql statements in consumer\n");
+
+		delete_table(*ht);
+		sqlite3_close(*database);
+		goto error;
+	}
+
+	return CODE_SUCCESS;
+
+error:
+	*ht = NULL;
+	*database = NULL;
+	return CODE_FAILED;
+}
+
 void *consumer(void *arg)
 {
 	int err;
@@ -548,28 +595,9 @@ void *consumer(void *arg)
 
 	info = (struct thread_msg *)arg;
 
-	/* initialize hashtable and sqlite db */
-	//	hash_table = calloc(TYPED_MACRO(MAX_HASH_ENTRIES, UL), sizeof(struct entry *));
-	hash_table = init_hashtable();
-	if (!hash_table) {
-		fprintf(stderr, "Failed to allocate space for hash_table\n");
+	err = prepare_thread_run(&hash_table, &db, info->thread_id);
+	if (err == CODE_FAILED)
 		goto error;
-	}
-
-	err = create_db_conn(DB_NAME, &db);
-	if (err) {
-		fprintf(stderr,
-			"Failed to create database connection in consumer\n");
-		goto error;
-	}
-
-	err = prepare_sql(db, hash_table);
-	printf("[%lu] Sql prepared\n", info->thread_id);
-	if (err) {
-		fprintf(stderr,
-			"Failed to prepare sql statements in consumer\n");
-		goto error;
-	}
 
 	head = info->head;
 
@@ -592,7 +620,9 @@ void *consumer(void *arg)
 		info->ready = false;
 
 		// ms should be assigned after lock is acquired
-		ms = head->first;
+		// thus the software barrier to force instruction
+		// ordering.
+		ASSIGN_WITH_SOFTWARE_BARRIER(ms, head->first);
 		while (ms != NULL) {
 			if (pthread_mutex_trylock(&(ms->message_state_lock)) ==
 			    0) {
@@ -613,10 +643,5 @@ void *consumer(void *arg)
 	close_database(db);
 
 error:
-	if (hash_table)
-		free(hash_table);
-	if (db)
-		sqlite3_close(db);
-
 	return NULL;
 }

@@ -13,7 +13,7 @@
 
 struct key_struct {
 	uint32_t key_hash;
-	char *key;
+	unsigned char *key;
 };
 
 struct entry {
