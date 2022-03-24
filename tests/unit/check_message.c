@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <check.h>
 #include <message.c>
+#include <message_ls.c>
 
 #define SYSCALL_MESSAGE_CREATE_NAME(syscall) test_message_create_##syscall
 
@@ -482,7 +483,7 @@ START_TEST(test_delete_message__SUCCESS)
 
 	link_message(head, ms);
 
-	delete_message(head, &ms);
+	remove_message_from_list(head, &ms);
 	ck_assert_ptr_null(ms);
 	ck_assert(head->elements == 0);
 
