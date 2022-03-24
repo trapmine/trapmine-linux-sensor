@@ -16,7 +16,7 @@
 #endif
 
 #define CODE_FAILED -1
-#define CODE_SUCCESS 0
+#define CODE_SUCCESS 1
 #define CODE_RETRY -2
 
 #define ERR_NOT_SUCCESS(err) ((err == CODE_FAILED) || (err == CODE_RETRY))
