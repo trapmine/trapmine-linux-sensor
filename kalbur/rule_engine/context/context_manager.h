@@ -18,8 +18,8 @@
 
 struct connections {
 	struct socket_create *sock;
-	struct tcp_ipv4_info *tcp4;
-	struct tcp_ipv6_info *tcp6;
+	struct tcp_info_t *tcp_info;
+	struct connections *next;
 };
 
 // TODO: Add open files
@@ -36,7 +36,7 @@ struct process_context {
 	char *parent_path;
 	char parent_comm[TASK_COMM_LEN];
 	struct stdio io[3];
-	struct connections **open_sockets;
+	struct connections *open_sockets;
 };
 
 int manage_process_context(safetable_t *ht, struct message_state *ms);

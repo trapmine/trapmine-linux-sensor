@@ -10,6 +10,7 @@
 #include <string.h>
 #include <helpers.h>
 #include <stdlib.h>
+#include <events.h>
 
 static int get_event_type(struct message_state *ms)
 {
@@ -81,17 +82,108 @@ static int populate_execve_event(struct process_context *ctx,
 	return CODE_SUCCESS;
 }
 
+static struct connections *find_connection_by_inode(struct connections *c,
+						    uint64_t i_ino)
+{
+	if (c == NULL)
+		return NULL;
+
+	while (c != NULL) {
+		if (c->sock->i_ino == i_ino) {
+			return c;
+		}
+
+		c = c->next;
+	}
+
+	ASSERT(c == NULL, "find_connection_by_inode: c != NULL");
+	return c;
+}
+
+static int insert_socket_creation(struct process_context *ctx,
+				  struct message_state *ms)
+{
+	struct connections *c, *last;
+	struct socket_create *sock;
+
+	sock = (struct socket_create *)ms->primary_data;
+
+	if (ctx->open_sockets == NULL) {
+		ctx->open_sockets = (struct connections *)calloc(
+			1UL, sizeof(struct connections));
+		if (ctx->open_sockets == NULL)
+			return CODE_FAILED;
+
+		__builtin_memcpy(ctx->open_sockets->sock, sock,
+				 sizeof(struct socket_create));
+
+		return CODE_SUCCESS;
+	}
+
+#ifdef __DEBUG__
+	ASSERT(ctx->open_sockets != NULL,
+	       "insert_socket_creation: ctx->open_sockets == NULL");
+	c = find_connection_by_inode(ctx->open_sockets, sock->i_ino);
+	ASSERT(c == NULL,
+	       "insert_socket_creation: c != NULL (socket already present)");
+#endif
+
+	// create new connection object.
+	c = (struct connections *)calloc(1UL, sizeof(struct connections));
+	if (c == NULL)
+		return CODE_FAILED;
+
+	__builtin_memcpy(c->sock, sock, sizeof(struct socket_create));
+
+	// add new connection to list
+	last = ctx->open_sockets;
+	while (last->next != NULL) {
+		last = last->next;
+	}
+
+	last->next = c;
+
+	return CODE_SUCCESS;
+}
+
+static int insert_socket_event(struct process_context *ctx,
+			       struct message_state *ms)
+{
+	struct connections *c;
+	tcp_info_t *tcp_info;
+
+	tcp_info = (tcp_info_t *)ms->primary_data;
+
+	c = find_connection_by_inode(ctx->open_sockets, tcp_info->t4.i_ino);
+	if (c == NULL)
+		return CODE_RETRY;
+
+	__builtin_memcpy(c->tcp_info, tcp_info, sizeof(tcp_info_t));
+
+	return CODE_SUCCESS;
+}
+
 static int populate_socket_event(struct process_context *ctx,
 				 struct message_state *ms)
 {
-	return CODE_SUCCESS;
+	struct probe_event_header *eh;
+	int err;
+
+	eh = (struct probe_event_header *)ms->primary_data;
+	ASSERT(eh != NULL, "populate_socket_event: eh == NULL");
+
+	if (eh->syscall_nr == SYS_SOCKET) {
+		err = insert_socket_creation(ctx, ms);
+	} else {
+		err = insert_socket_event(ctx, ms);
+	}
+
+	return err;
 }
 
 static int populate_context(struct process_context *ctx,
 			    struct message_state *ms, int event_type)
 {
-	ASSERT(ctx != NULL, "populate_context: ctx == NULL");
-
 	if (IS_SOCKET_EVENT(event_type)) {
 		return populate_socket_event(ctx, ms);
 	} else if (event_type == SYS_EXECVE) {
@@ -103,6 +195,9 @@ static int populate_context(struct process_context *ctx,
 
 int add_event_context(struct process_context *ctx, struct message_state *ms)
 {
+	ASSERT(ctx != NULL, "add_event_context: ctx == NULL");
+	ASSERT(ms != NULL, "add_event_context: ms == NULL");
+
 	int event_type, err;
 	event_type = get_event_type(ms);
 	if (event_type == CODE_FAILED) {
