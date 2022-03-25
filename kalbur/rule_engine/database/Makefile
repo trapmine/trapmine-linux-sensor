@@ -13,15 +13,15 @@ INC := $(INCLUDES)
 
 $(NOTIFIER).o: $(NOTIFIER).c $(NOTIFIER).h
 	$(call msg,CC,$@)
-	$(Q)$(CC) $(CFLAGS) $(INCLUDES) -c $(NOTIFIER).c -o $@
+	$(Q)$(CC) -DAPPLY_ASSERT $(CFLAGS) $(INCLUDES) -c $(NOTIFIER).c -o $@
 
 $(RULES).o: $(RULES).c $(RULES).h
 	$(call msg,CC,$@)
-	$(Q)$(CC) $(CFLAGS) $(INC) -c $(RULES).c -o $@
+	$(Q)$(CC) -DAPPLY_ASSERT $(CFLAGS) $(INC) -c $(RULES).c -o $@
 
 $(DATABASE).o: $(DATABASE).c $(DATABASE).h $(HEADER_DEPENDENCIES)
 	$(call msg,CC,$@)
-	$(Q)$(CC) $(CFLAGS) $(INCLUDES) -c $(DATABASE).c -o $@
+	$(Q)$(CC) -DAPPLY_ASSERT $(CFLAGS) $(INCLUDES) -c $(DATABASE).c -o $@
 
 .PHONY: clean
 
