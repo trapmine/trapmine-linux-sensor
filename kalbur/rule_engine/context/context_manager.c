@@ -11,8 +11,8 @@
 #include "populate.h"
 #include <stdio.h>
 
-// The key of a process is the crc32_hash(event_time, tgid_pid, comm)
-#define CONTEXT_KEY_LEN 2 * sizeof(uint64_t) + TASK_COMM_LEN
+// The key of a process is the crc32_hash(tgid_pid, comm)
+#define CONTEXT_KEY_LEN sizeof(uint64_t) + TASK_COMM_LEN
 
 static int try_lock_context(struct process_context *ctx)
 {
@@ -57,20 +57,28 @@ static struct process_context *create_process_context(struct message_state *ms)
 	return ctx;
 }
 
+#define BUILD_PROCESS_HASH_KEY(key, eh)                                        \
+	__builtin_memset(key, 0, CONTEXT_KEY_LEN);                             \
+	__builtin_memcpy(key, &eh->tgid_pid, sizeof(uint64_t));                \
+	__builtin_memcpy(&(key[sizeof(uint64_t)]), eh->comm,                   \
+			 TYPED_MACRO(TASK_COMM_LEN, UL));
+
 // returns CODE_FAILED if we could not create new context, or place it in hashtable.
 static int get_process_context(safetable_t *ht, struct message_state *ms,
 			       struct process_context **ctx)
 {
 	int err;
 	struct probe_event_header *eh;
+	unsigned char key[CONTEXT_KEY_LEN];
 
 	ASSERT(ms->complete == 1, "get_process_context: ms->compelte == 0");
 
 	eh = (struct probe_event_header *)ms->primary_data;
 	ASSERT(eh != NULL, "get_process_context: eh == NULL");
 
-	*ctx = (struct process_context *)safe_get(ht, (unsigned char *)eh,
-						  CONTEXT_KEY_LEN);
+	BUILD_PROCESS_HASH_KEY(key, eh);
+
+	*ctx = (struct process_context *)safe_get(ht, key, CONTEXT_KEY_LEN);
 	if (*ctx == NULL) {
 		// Since events maybe consumed out of order, we may
 		// receive an event for a process whose context is
@@ -92,7 +100,7 @@ static int get_process_context(safetable_t *ht, struct message_state *ms,
 		ASSERT(err == CODE_SUCCESS, "get_process_context: err != 0");
 
 		// save context in hashtable
-		err = safe_put(ht, (unsigned char *)eh, *ctx, CONTEXT_KEY_LEN);
+		err = safe_put(ht, key, *ctx, CONTEXT_KEY_LEN);
 		if (err != CODE_SUCCESS) {
 			err = CODE_FAILED;
 			goto delete_ctx;
