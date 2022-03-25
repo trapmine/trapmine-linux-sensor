@@ -14,6 +14,7 @@ safetable_t *init_safetable(void);
 void *safe_get(safetable_t *hash_table, unsigned char *key, size_t key_size);
 int safe_put(safetable_t *hash_table, unsigned char *key, void *value,
 	     size_t key_size);
+void *safe_delete(safetable_t *hash_table, unsigned char *key, size_t key_size);
 void safe_reset(safetable_t *hash_table);
 void delete_safetable(safetable_t *hash_table);
 

@@ -140,6 +140,9 @@ void *hash_get(hashtable_t *hash_table, unsigned char *key, size_t key_size)
 int hash_put(hashtable_t *hash_table, unsigned char *key, void *value,
 	     size_t key_size)
 {
+	// do not allow null values
+	ASSERT(value != NULL, "hash_put: value == NULL");
+
 	struct entry *e;
 
 	struct key_struct ks;
@@ -155,6 +158,73 @@ int hash_put(hashtable_t *hash_table, unsigned char *key, void *value,
 	}
 
 	return insert_hash_table(hash_table, index, value, &ks);
+}
+
+static struct entry *find_prev_entry(hashtable_t *hash_table,
+				     const unsigned int index,
+				     struct key_struct *key)
+{
+	struct entry *e;
+	struct entry *prev;
+
+	// This should have been checked in the calling function
+	// This function has to assume that an entry is present
+	ASSERT(hash_table[index] != NULL,
+	       "find_prev_entry: hash_table[index == NULL");
+
+	for (e = hash_table[index]->next, prev = hash_table[index]; e;
+	     e = e->next) {
+		if (cmp_keys(&(e->key), key))
+			return prev;
+		prev = e;
+	}
+	return NULL;
+}
+
+// Deletes an entry for the given key
+// If entry not found, then returns NULL
+void *hash_delete(hashtable_t *hash_table, unsigned char *key, size_t key_size)
+{
+	struct entry *del, *prev;
+	void *value;
+	struct key_struct ks;
+
+	ks.key_hash = crc32c_hash(key, key_size);
+	ks.key = key;
+
+	unsigned int index = key_index(ks.key_hash);
+
+	if (hash_table[index] == NULL)
+		return NULL;
+
+	if (cmp_keys(KEY_PTR(hash_table), &ks)) {
+		del = hash_table[index];
+		hash_table[index] = del->next;
+		value = del->value;
+		free(del);
+
+		// do not allow null values
+		ASSERT(value != NULL, "hash_delete: value == NULL");
+		return value;
+	}
+
+	prev = find_prev_entry(hash_table, index, &ks);
+	if (prev == NULL) {
+		return NULL;
+	}
+	del = prev->next;
+	// if del not found, then find_prev_entry should return NULL
+	ASSERT(del != NULL, "hash_delete: del == NULL");
+
+	// unlink entry to be deleted
+	prev->next = del->next;
+
+	value = del->value;
+	free(del);
+
+	// do not allow null values
+	ASSERT(value != NULL, "hash_delete: value == NULL");
+	return value;
 }
 
 void hash_reset(hashtable_t *hash_table)

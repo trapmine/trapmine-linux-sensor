@@ -47,7 +47,7 @@ void *safe_get(safetable_t *table, unsigned char *key, size_t key_size)
 	err = pthread_mutex_lock(&table->lock);
 	if (err != 0) {
 		fprintf(stderr,
-			"safe_get: Failed to acquire lock on table: %d\n",
+			"safe_get: Error while trying to acquire lock on table: %d\n",
 			errno);
 		return NULL;
 	}
@@ -67,7 +67,7 @@ int safe_put(safetable_t *table, unsigned char *key, void *value,
 	err = pthread_mutex_lock(&table->lock);
 	if (err != 0) {
 		fprintf(stderr,
-			"safe_put: Failed to acquire lock on table: %d\n",
+			"safe_put: Error while trying to acquire lock on table: %d\n",
 			errno);
 		return CODE_FAILED;
 	}
@@ -79,6 +79,25 @@ int safe_put(safetable_t *table, unsigned char *key, void *value,
 	return err;
 }
 
+void *safe_delete(safetable_t *table, unsigned char *key, size_t key_size)
+{
+	int err;
+	void *val;
+
+	err = pthread_mutex_lock(&table->lock);
+	if (err != 0) {
+		fprintf(stderr,
+			"safe_delete: Error while trying to acquire lock on table: %d\n",
+			err);
+		return NULL;
+	}
+
+	val = hash_delete(table->ht, key, key_size);
+	pthread_mutex_unlock(&table->lock);
+
+	return val;
+}
+
 void safe_reset(safetable_t *table)
 {
 	int err;
@@ -86,7 +105,7 @@ void safe_reset(safetable_t *table)
 	err = pthread_mutex_lock(&table->lock);
 	if (err != 0) {
 		fprintf(stderr,
-			"safe_reset: Failed to acquire lock on table: %d\n",
+			"safe_reset: Error while trying to acquire lock on table: %d\n",
 			errno);
 		return;
 	}
@@ -105,7 +124,7 @@ void delete_safetable(safetable_t *table)
 	err = pthread_mutex_lock(&table->lock);
 	if (err != 0) {
 		fprintf(stderr,
-			"delete_safetable: Failed to acquire lock on table: %d\n",
+			"delete_safetable: Error while trying to acquire lock on table: %d\n",
 			errno);
 		return;
 	}
