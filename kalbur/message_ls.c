@@ -55,6 +55,7 @@ As long as the worker_threads are running the main_thread cannot begin garbage c
 struct msg_list *initialize_msg_list(void)
 {
 	struct msg_list *head = calloc(1UL, sizeof(struct msg_list));
+	head->wait_for_gc = false;
 	return head;
 }
 
