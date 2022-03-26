@@ -396,6 +396,11 @@ static void transition_db_saved(struct message_state *ms, int prog_err)
 	transition_end_state(ms);
 }
 
+static void transition_gc_force(struct message_state *ms)
+{
+	transition_progress(ms, MS_GC);
+}
+
 void transition_ms_progress(struct message_state *ms,
 			    uint64_t transition_target, int prog_err)
 {
@@ -408,6 +413,9 @@ void transition_ms_progress(struct message_state *ms,
 		break;
 	case MS_DB_SAVED:
 		transition_db_saved(ms, prog_err);
+		break;
+	case MS_GC:
+		transition_gc_force(ms);
 		break;
 	default:
 		return;
