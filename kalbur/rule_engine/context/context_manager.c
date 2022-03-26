@@ -57,6 +57,8 @@ static struct process_context *create_process_context(struct message_state *ms)
 	return ctx;
 }
 
+// We explicitely copy the relevant data needed for process_context hash
+// so that if struct probe_event_header changes, our hashing doesnt break
 #define BUILD_PROCESS_HASH_KEY(key, eh)                                        \
 	__builtin_memset(key, 0, CONTEXT_KEY_LEN);                             \
 	__builtin_memcpy(key, &eh->tgid_pid, sizeof(uint64_t));                \
@@ -88,6 +90,10 @@ static int get_process_context(safetable_t *ht, struct message_state *ms,
 			err = CODE_RETRY;
 			goto error;
 		}
+
+		// create process_context struct. Return CODE_FAILED
+		// in case of failiure, which causes this message_state
+		// not to trigger rules
 		*ctx = create_process_context(ms);
 		if (*ctx == NULL) {
 			err = CODE_FAILED;
@@ -99,7 +105,8 @@ static int get_process_context(safetable_t *ht, struct message_state *ms,
 		// new context, so err must be CODE_SUCCESS
 		ASSERT(err == CODE_SUCCESS, "get_process_context: err != 0");
 
-		// save context in hashtable
+		// save context in hashtable. If failed to save process_context
+		// return CODE_FAILED, and destroy newly created struct
 		err = safe_put(ht, key, *ctx, CONTEXT_KEY_LEN);
 		if (err != CODE_SUCCESS) {
 			err = CODE_FAILED;
@@ -134,6 +141,19 @@ delete_ctx:
 	return err;
 }
 
+static bool is_end_of_life_event(struct message_state *ms)
+{
+	struct probe_event_header *eh;
+
+	eh = (struct probe_event_header *)ms->primary_data;
+	ASSERT(eh != NULL, "is_end_of_life_event: eh == NULL");
+
+	if (IS_EXIT_EVENT(eh->syscall_nr)) {
+		return true;
+	}
+
+	return false;
+}
 int manage_process_context(safetable_t *ht, struct message_state *ms)
 {
 	int err;
@@ -142,20 +162,41 @@ int manage_process_context(safetable_t *ht, struct message_state *ms)
 	ASSERT(ms != NULL, "add_event_context: ms == NULL");
 	ASSERT(ms->complete == 1, "add_event_context: ms->complete == 0");
 
+	// If ht == NULL, we return CODE_FAILED which causes
+	// ms to transition to MS_IGNORE_CTX_SAVE state.
+	// This means it wont have rules applied to it
 	if (ht == NULL) {
 		fprintf(stderr,
 			"manage_process_context: hashtable for process context is NULL\n");
+
+		err = CODE_FAILED;
+		goto error;
 	}
 
+	// get_process_context only locks the context struct if
+	// successfuly acquire. If CODE_RETRY or CODE_FAILED context
+	// is not locked, so we can directly return
 	err = get_process_context(ht, ms, &ctx);
 	if (err != CODE_SUCCESS)
-		goto out;
+		goto error;
 
 	// only proceeds if context is locked.
 	ASSERT(ctx != NULL, "manage_process_context: ctx == NULL");
 
+	if (is_end_of_life_event(ms)) {
+		// If this is an exit event, we return CODE_FAILED
+		// so engine transitions ms to MS_IGNORE_CTX_SAVE.
+		// We do not want to trigger rules for process exit.
+		//
+		// Return to out target, because context needs to be
+		// unlocked.
+		err = CODE_FAILED;
+		goto out;
+	}
+
 	err = add_event_context(ctx, ms);
-	unlock_context(ctx);
 out:
+	unlock_context(ctx);
+error:
 	return err;
 }

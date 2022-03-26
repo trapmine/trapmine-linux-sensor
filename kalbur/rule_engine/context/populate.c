@@ -16,8 +16,7 @@ static int get_event_type(struct message_state *ms)
 {
 	struct probe_event_header *eh =
 		(struct probe_event_header *)ms->primary_data;
-	if (eh == NULL)
-		return CODE_FAILED;
+	ASSERT(eh != NULL, "get_event_type: eh == NULL");
 
 	return eh->syscall_nr;
 }
@@ -32,6 +31,7 @@ static int populate_execve_event(struct process_context *ctx,
 	ASSERT(ms != NULL, "populate_execve_event: ms == NULL");
 
 	pinfo = (struct process_info *)ms->primary_data;
+	ASSERT(pinfo != NULL, "populate_execve_event: pinfo == NULL");
 	ASSERT(pinfo->eh.syscall_nr == SYS_EXECVE,
 	       "populate_execve_event: syscall_nr != SYS_EXECVE");
 
@@ -121,6 +121,8 @@ static int insert_socket_creation(struct process_context *ctx,
 	}
 
 #ifdef __DEBUG__
+	// Ensure that a socket with the same inode number is not present
+	// in the list. Just some invariant validation.
 	ASSERT(ctx->open_sockets != NULL,
 	       "insert_socket_creation: ctx->open_sockets == NULL");
 	c = find_connection_by_inode(ctx->open_sockets, sock->i_ino);
@@ -154,6 +156,8 @@ static int insert_socket_event(struct process_context *ctx,
 
 	tcp_info = (tcp_info_t *)ms->primary_data;
 
+	// if we could not find the associated connection object, then this
+	// event was possibly received out of order. So we will retry it later
 	c = find_connection_by_inode(ctx->open_sockets, tcp_info->t4.i_ino);
 	if (c == NULL)
 		return CODE_RETRY;
@@ -200,13 +204,7 @@ int add_event_context(struct process_context *ctx, struct message_state *ms)
 
 	int event_type, err;
 	event_type = get_event_type(ms);
-	if (event_type == CODE_FAILED) {
-		err = CODE_FAILED;
-		goto out;
-	}
 
-	err = populate_context(ctx, ms, event_type);
-out:
-	return err;
+	return populate_context(ctx, ms, event_type);
 }
 
