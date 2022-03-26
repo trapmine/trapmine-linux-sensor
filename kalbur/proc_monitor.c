@@ -152,7 +152,27 @@ fail:
 static void mark_ms_as_garbage(struct message_state *ms)
 {
 	ASSERT(ms != NULL, "mark_ms_as_garbage: ms == NULL");
-	ms->saved = 1;
+
+	// forcefully garbage collect message
+	transition_ms_progress(ms, MS_GC, CODE_SUCCESS);
+}
+
+static void try_garbage_collect(struct msg_list *head)
+{
+	int err;
+	// acquire lock on msg_list, if all threads are sleeping
+	err = attempt_lock_threads();
+	if (err == 0) {
+#ifdef __DEBUG__
+		printf("calling garbage collect.\n");
+		printf("head->elements: %d\n", head->elements);
+#endif
+		garbage_collect(head, "pause collect");
+		head->wait_for_gc = false;
+		unlock_threads();
+	} else {
+		head->wait_for_gc = true;
+	}
 }
 
 static void consume_kernel_events(void *ctx, int cpu, void *data,
@@ -161,7 +181,6 @@ static void consume_kernel_events(void *ctx, int cpu, void *data,
 	struct probe_event_header eh_local = { 0 };
 	struct message_state *ms;
 	struct msg_list *head;
-	int err;
 
 	head = (struct msg_list *)ctx;
 	ASSERT(head != NULL, "consume_kernel_events: head == NULL");
@@ -186,35 +205,21 @@ static void consume_kernel_events(void *ctx, int cpu, void *data,
 	if (construct_message_state(ms, &eh_local, data, size) == CODE_FAILED)
 		goto error;
 
-	// TODO: move this into another functon. Change force logic. Instead of blocking
-	// stop broadcasting until attempt_lock_threads succeeds
-	// Once garbage collect has been called set 'force' bool to false again
 	if (head->elements > GARBAGE_COLLECT) {
-		// acquire lock on msg_list, if all threads are sleeping
-		err = attempt_lock_threads();
-		if (err == 0) {
-			garbage_collect(head, "pause collect");
-			unlock_threads();
-		}
-
-		if (head->elements > GARBAGE_COLLECT_LIMIT) {
-			err = force_lock_threads();
-			if (err == 0) {
-				garbage_collect(head, "force collect");
-				printf("Garbage collected\n");
-				unlock_threads();
-			}
-		}
+		try_garbage_collect(head);
 	}
 
-	//if (ms->pred(ms)) {
-	//	ms->complete = 1;
-	//	broadcast_complete();
-	//}
-
+	// Make sure this is done regardless of whether broadcast_complete()
+	// is called or not. If we don't try this everytime we may miss this
+	// state transition for some messages.
 	transition_ms_progress(ms, MS_COMPLETE, ms->pred(ms));
-	if (IS_MS_COMPLETE(ms)) {
-		broadcast_complete();
+
+	// If we are not waiting for a garbage collect operation, broadcast
+	// message to wake up sleeping threads
+	if (!(head->wait_for_gc)) {
+		if (IS_MS_COMPLETE(ms)) {
+			broadcast_complete();
+		}
 	}
 
 out:
