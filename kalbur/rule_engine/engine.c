@@ -16,6 +16,7 @@ static bool should_manage_ctx(struct message_state *ms)
 {
 	ASSERT(IS_MS_COMPLETE(ms) != 0,
 	       "should_manage_ctx: ms->progress != completed");
+	ASSERT(IS_MS_GC(ms) == 0, "should_save_db: ms->progress == gc");
 
 	if (!(IS_MS_CTX_SAVED(ms) || IS_MS_IGNORE_CTX_SAVE(ms))) {
 		return true;
