@@ -373,7 +373,9 @@ static void transition_context(struct message_state *ms, int prog_err)
 		transition_progress(ms, MS_IGNORE_CTX_SAVE);
 	}
 	// if prog_err == CODE_RETRY, we do not transition to next state
+	// This is so that the engine retries with this same message again
 
+	// Decide whether ms is ready for garbage collection
 	transition_end_state(ms);
 }
 
@@ -388,7 +390,9 @@ static void transition_db_saved(struct message_state *ms, int prog_err)
 		transition_progress(ms, MS_GC);
 	}
 	// if prog_err == CODE_RETRY, we do not transition to next state
+	// This is so that the engine retries with this message again
 
+	// Decide whether ms is ready for garbage collection
 	transition_end_state(ms);
 }
 

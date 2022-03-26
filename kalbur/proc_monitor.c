@@ -356,22 +356,23 @@ int main(int argc, char **argv)
 		goto out;
 	}
 
-	/* Initialize number of cpu */
+	/* Initialize number of threads */
 	long num = sysconf(_SC_NPROCESSORS_CONF);
 	if (num < 0) {
 		fprintf(stderr, "Failed to get number of cpus: %ld\n", num);
 	}
 	thread_num = (size_t)(num / 2) + 1;
 
-	/* perform initializations */
+	/* initialize message list */
 	head = initialize_msg_list();
 	if (head == NULL)
 		goto out;
 
-	// initialize safetable
+	/* initialize safetable */
 	table = initialize_safetable();
-	initialize_thread_ls(head, table);
 
+	/* Initialize threads */
+	initialize_thread_ls(head, table);
 	init_threads();
 
 	err = poll_buff(bpf_map__fd(skel->maps.streamer), consume_kernel_events,

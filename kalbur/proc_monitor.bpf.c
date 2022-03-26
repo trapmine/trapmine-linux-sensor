@@ -2313,7 +2313,9 @@ out:
 /* The following functions are renamed in different kernel version
  * Userspace loader checks which functions exists before attaching */
 
-/* TODO: Remove these hooks and replace with sched_process_exit */
+/* TODO: Remove these hooks and replace with sched_process_exit 
+ * TODO: Add kprobe on do_signal to detect if sched_process_exit called as a result of signal 
+ */
 
 // < 5.10
 SEC("kprobe/do_signal")
