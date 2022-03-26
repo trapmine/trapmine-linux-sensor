@@ -37,6 +37,8 @@
 #define LPE_COMMIT_CREDS -2
 #define MODPROBE_OVERWRITE -3
 
+#define IS_EXIT_EVENT(syscall) (0)
+
 #define IS_SOCKET_EVENT(syscall)                                               \
 	((syscall == SYS_SOCKET) || (syscall == SYS_CONNECT) ||                \
 	 (syscall == SYS_ACCEPT))
