@@ -288,7 +288,7 @@ static struct message_state *free_message(struct message_state *ms)
 
 	// We should only be freeing from the free list
 	// which in turn should only contain saved messages
-	ASSERT(((ms->saved == 1) || (ms->discard == 1)) && (ms->complete == 1),
+	ASSERT((IS_MS_GC(ms) != 0) && (IS_MS_COMPLETE(ms) != 0),
 	       "free_message_contents: invalid value of ms->saved or ms->complete");
 
 	if (ms->primary_data != NULL) {
@@ -331,6 +331,8 @@ static void transition_progress(struct message_state *ms, uint64_t transition)
 	ms->progress = ms->progress | transition;
 }
 
+// Check if all events for the message have been received and we are ready
+// to consume it.
 static void transition_complete(struct message_state *ms, int prog_err)
 {
 	if (prog_err == CODE_SUCCESS) {
@@ -338,9 +340,10 @@ static void transition_complete(struct message_state *ms, int prog_err)
 	}
 }
 
+// Check if we need to transition ms progress state to MS_GC (garbage)
 static void transition_end_state(struct message_state *ms)
 {
-	ASSERT((IS_MS_COMPLETE(ms)) == 1,
+	ASSERT((IS_MS_COMPLETE(ms)) != 0,
 	       "transition_end_state: ms->progress not set to completed");
 
 	if (IS_MS_GC(ms)) {
@@ -359,9 +362,10 @@ static void transition_end_state(struct message_state *ms)
 	}
 }
 
+// Check if we can transition ms progress state to MS_CTX_SAVED (context saved)
 static void transition_context(struct message_state *ms, int prog_err)
 {
-	ASSERT((IS_MS_COMPLETE(ms)) == 1,
+	ASSERT((IS_MS_COMPLETE(ms)) != 0,
 	       "transition_context: ms->progress not set to completed");
 
 	if (prog_err == CODE_SUCCESS) {
@@ -379,6 +383,7 @@ static void transition_context(struct message_state *ms, int prog_err)
 	transition_end_state(ms);
 }
 
+// Check if we can transition ms progress state to MS_DB_SAVED (saved in sqlite db)
 static void transition_db_saved(struct message_state *ms, int prog_err)
 {
 	ASSERT((IS_MS_COMPLETE(ms)) == 1,
@@ -401,6 +406,8 @@ static void transition_gc_force(struct message_state *ms)
 	transition_progress(ms, MS_GC);
 }
 
+// For the given message_state struct, set the progress state to
+// transition target, if the appropriate prog_err value is given
 void transition_ms_progress(struct message_state *ms,
 			    uint64_t transition_target, int prog_err)
 {

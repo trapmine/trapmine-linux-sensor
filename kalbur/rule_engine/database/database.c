@@ -360,8 +360,6 @@ int insert_file_info(sqlite3 *db, hashtable_t *ht, char *string_data,
 	SQLITE3_BIND_INT("insert_file_info", int64, S_MAGIC, f->s_magic);
 
 	if (f->file_offset < LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE)) {
-		ASSERT(string_data[LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE)] == 0,
-		       "string_data[LAST_NULL_BYTE] != 0");
 		filename = build_filename_from_event(
 			&string_data[f->file_offset], f->path_len);
 		if (filename != NULL) {

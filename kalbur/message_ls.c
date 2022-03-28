@@ -189,11 +189,10 @@ struct message_state *get_message(struct msg_list *head,
 		ASSERT(eh != NULL,
 		       "get_message: (eh = get_even_header(ms)) == NULL");
 		if (EVENT_HEADER_EQ(eh_incoming, eh)) {
-			if (!ms->complete) { // to check for repeated wakeups
-				ASSERT(ms->saved == 0,
-				       "get_message: ms->saved == 1");
-				ASSERT(ms->discard == 0,
-				       "get_message: ms->discard == 1");
+			if (!IS_MS_COMPLETE(
+				    ms)) { // to check for repeated wakeups
+				ASSERT(IS_MS_GC(ms) == 0,
+				       "get_message: IS_MS_GC == 1");
 				return ms;
 			} else // If ms->complete and event headers are equal, then ignore
 				return NULL;

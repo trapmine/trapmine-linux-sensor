@@ -47,27 +47,40 @@ static int populate_execve_event(struct process_context *ctx,
 
 	if (MESSAGE_STRING(ms) != NULL) {
 		// save filename
-		ASSERT(MESSAGE_STRING_SZ(ms) > pinfo->file.file_offset,
+		ASSERT((pinfo->file.file_offset ==
+			LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE)) ||
+			       (MESSAGE_STRING_SZ(ms) >
+				pinfo->file.file_offset),
 		       "create_process_context: string_data.size <= file_offset");
 		ctx->file_path = build_filename_from_event(
 			PTR_TO_STRING_DATA(ms, pinfo->file.file_offset),
 			pinfo->file.path_len);
 
 		// save cmdline
-		ASSERT(MESSAGE_STRING_SZ(ms) > pinfo->args.argv_offset,
+		ASSERT((pinfo->args.argv_offset ==
+			LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE)) ||
+			       (MESSAGE_STRING_SZ(ms) >
+				pinfo->args.argv_offset),
 		       "create_process_context: string_data.size <= argv_offset");
 		ctx->cmdline = build_cmdline(MESSAGE_STRING(ms),
 					     pinfo->args.argv_offset,
 					     pinfo->args.nargv);
 
 		// save interpreter string, if present
-		ASSERT(MESSAGE_STRING_SZ(ms) > pinfo->interp_str_offset,
+		ASSERT((pinfo->interp_str_offset ==
+			LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE)) ||
+			       (MESSAGE_STRING_SZ(ms) >
+				pinfo->interp_str_offset),
 		       "create_process_context: string_data.size <= interp_str_offset");
-		interp_sz = strlen(
-			PTR_TO_STRING_DATA(ms, pinfo->interp_str_offset));
+		if (pinfo->interp_str_offset ==
+		    LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE))
+			interp_sz = 0;
+		else
+			interp_sz = strlen(PTR_TO_STRING_DATA(
+				ms, pinfo->interp_str_offset));
 		ASSERT(interp_sz < MESSAGE_STRING_SZ(ms),
 		       "create_process_context: interp_sz > string_data.sz");
-		ASSERT((interp_sz + pinfo->interp_str_offset) <
+		ASSERT((interp_sz + pinfo->interp_str_offset) <=
 			       PER_CPU_STR_BUFFSIZE,
 		       "create_process_context: interpreter string overflow: (interp_sz + interp_str_offset) > PER_CPU_STR_BUFFSIZE");
 		ctx->interpreter = calloc(interp_sz + 1, sizeof(char));
@@ -105,15 +118,31 @@ static int insert_socket_creation(struct process_context *ctx,
 {
 	struct connections *c, *last;
 	struct socket_create *sock;
+	int err;
 
 	sock = (struct socket_create *)ms->primary_data;
 
+	c = NULL;
 	if (ctx->open_sockets == NULL) {
+		// Create connection object.
 		ctx->open_sockets = (struct connections *)calloc(
 			1UL, sizeof(struct connections));
-		if (ctx->open_sockets == NULL)
-			return CODE_FAILED;
+		if (ctx->open_sockets == NULL) {
+			c = ctx->open_sockets;
+			err = CODE_FAILED;
+			goto error;
+		}
 
+		// Create socket_create object
+		ctx->open_sockets->sock = (struct socket_create *)calloc(
+			1UL, sizeof(struct socket_create));
+		if (ctx->open_sockets->sock == NULL) {
+			c = ctx->open_sockets;
+			err = CODE_FAILED;
+			goto error;
+		}
+
+		// copy socket_create object
 		__builtin_memcpy(ctx->open_sockets->sock, sock,
 				 sizeof(struct socket_create));
 
@@ -132,13 +161,23 @@ static int insert_socket_creation(struct process_context *ctx,
 
 	// create new connection object.
 	c = (struct connections *)calloc(1UL, sizeof(struct connections));
-	if (c == NULL)
-		return CODE_FAILED;
+	if (c == NULL) {
+		err = CODE_FAILED;
+		goto error;
+	}
 
+	// create new socket_create object.
+	c->sock = (struct socket_create *)calloc(1UL,
+						 sizeof(struct socket_create));
+	if (c->sock == NULL) {
+		err = CODE_FAILED;
+		goto error;
+	}
 	__builtin_memcpy(c->sock, sock, sizeof(struct socket_create));
 
 	// add new connection to list
 	last = ctx->open_sockets;
+	ASSERT(last != NULL, "insert_socket_creation: last == NULL");
 	while (last->next != NULL) {
 		last = last->next;
 	}
@@ -146,6 +185,16 @@ static int insert_socket_creation(struct process_context *ctx,
 	last->next = c;
 
 	return CODE_SUCCESS;
+
+error:
+	if (c != NULL) {
+		if (c->sock != NULL) {
+			free(c->sock);
+		}
+		free(c);
+	}
+
+	return err;
 }
 
 static int insert_socket_event(struct process_context *ctx,
@@ -161,6 +210,11 @@ static int insert_socket_event(struct process_context *ctx,
 	c = find_connection_by_inode(ctx->open_sockets, tcp_info->t4.i_ino);
 	if (c == NULL)
 		return CODE_RETRY;
+
+	ASSERT(c->tcp_info == NULL, "insert_socket_event: c->tcp_info != NULL");
+	c->tcp_info = (struct tcp_info_t *)calloc(1UL, sizeof(tcp_info_t));
+	if (c->tcp_info == NULL)
+		return CODE_FAILED;
 
 	__builtin_memcpy(c->tcp_info, tcp_info, sizeof(tcp_info_t));
 
@@ -202,7 +256,7 @@ int add_event_context(struct process_context *ctx, struct message_state *ms)
 	ASSERT(ctx != NULL, "add_event_context: ctx == NULL");
 	ASSERT(ms != NULL, "add_event_context: ms == NULL");
 
-	int event_type, err;
+	int event_type;
 	event_type = get_event_type(ms);
 
 	return populate_context(ctx, ms, event_type);

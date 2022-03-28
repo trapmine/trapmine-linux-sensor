@@ -117,9 +117,6 @@ struct message_state {
 		*next_gc; // Optimization to quickly find struct to free
 	int cpu;
 	uint64_t progress;
-	int complete;
-	int saved;
-	int discard;
 };
 
 int construct_message_state(struct message_state *ms,

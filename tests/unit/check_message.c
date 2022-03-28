@@ -197,8 +197,6 @@ START_TEST(test_get_event_header__FAIL__no_header)
 	ck_assert_ptr_null(res);
 }
 
-/* Message list test cases */
-
 Suite *message_suite(void)
 {
 	Suite *s;
@@ -278,6 +276,8 @@ Suite *message_suite(void)
 
 	return s;
 }
+
+/* Message list test cases */
 
 START_TEST(test_link_message__SUCCESS)
 {

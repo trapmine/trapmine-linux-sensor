@@ -27,24 +27,6 @@
 			goto rollback;                                         \
 	} while (0)
 
-static inline void set_saved(struct message_state *ms)
-{
-	ASSERT(ms->saved == 0, "set_saved: ms->saved != 0");
-	ASSERT(ms->discard == 0, "set_saved: ms->discard != 0");
-	ASSERT(ms->complete == 1, "set_saved: ms->complete != 1");
-
-	ms->saved = 1;
-}
-
-static inline void set_discard(struct message_state *ms)
-{
-	ASSERT(ms->discard == 0, "set_discard: ms->discard != 0");
-	ASSERT(ms->saved == 0, "set_discard: ms->saved != 0");
-	ASSERT(ms->complete == 1, "set_discard: ms->complete != 1");
-
-	ms->discard = 1;
-}
-
 static int save_mmap_helper(sqlite3 *db, hashtable_t *ht, struct proc_mmap *pm,
 			    char *string_data, int event_id)
 {

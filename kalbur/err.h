@@ -8,7 +8,7 @@
 
 #ifdef APPLY_ASSERT
 #include <assert.h>
-#define ASSERT(expr, msg) assert(expr &&msg)
+#define ASSERT(expr, msg) assert((expr) && msg)
 #else
 #define ASSERT(expr, msg)                                                      \
 	do {                                                                   \
