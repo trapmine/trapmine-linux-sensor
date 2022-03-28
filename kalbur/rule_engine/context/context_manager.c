@@ -194,7 +194,7 @@ static bool is_fully_consumed(safetable_t *event_counter,
 	ASSERT(eh != NULL, "is_fully_consumed: eh == NULL");
 
 	BUILD_PROCESS_HASH_KEY(key, eh);
-	ecnt = (int64_t *)safe_get(event_counter, key, CONTEXT_KEY_LEN);
+	ecnt = (int64_t)safe_get(event_counter, key, CONTEXT_KEY_LEN);
 	ASSERT(ecnt != 0, "is_fully_consumed: ecnt == 0");
 
 	// If the event count for this process is 1, then only
