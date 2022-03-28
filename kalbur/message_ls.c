@@ -50,6 +50,7 @@ As long as the worker_threads are running the main_thread cannot begin garbage c
 #include <err.h>
 #include <stdlib.h>
 #include <message.h>
+#include <context_manager.h>
 #include "message_ls.h"
 
 struct msg_list *initialize_msg_list(void)
@@ -220,8 +221,32 @@ struct message_state *get_message(struct msg_list *head,
 	return ms;
 }
 
+void count_event(struct message_state *ms, safetable_t *counter, bool inc)
+{
+	struct probe_event_header *eh;
+	unsigned char key[CONTEXT_KEY_LEN];
+	int64_t ecnt;
+
+	eh = get_event_header(ms);
+	ASSERT(eh != NULL, "count_event: eh == NULL");
+
+	BUILD_PROCESS_HASH_KEY(key, eh);
+	ecnt = (int64_t)safe_get(counter, key, CONTEXT_KEY_LEN);
+	if (inc) {
+		safe_put(counter, key, (void *)(ecnt + 1), CONTEXT_KEY_LEN);
+	} else {
+		ASSERT(ecnt > 0, "count_event: counter <= 0");
+		if ((ecnt - 1) == 0) {
+			safe_delete(counter, key, CONTEXT_KEY_LEN);
+		} else {
+			safe_put(counter, key, (void *)(ecnt - 1),
+				 CONTEXT_KEY_LEN);
+		}
+	}
+}
+
 /* Free all saved messages */
-void garbage_collect(struct msg_list *head, char *caller)
+void garbage_collect(struct msg_list *head, safetable_t *counter)
 {
 	struct message_state *ms;
 	struct message_state *tmp;
@@ -235,6 +260,9 @@ void garbage_collect(struct msg_list *head, char *caller)
 
 	while (ms != NULL) {
 		tmp = ms->next_gc;
+
+		// decrement counter and remove message
+		count_event(ms, counter, false);
 		remove_message_from_list(head, &ms);
 
 		ms = tmp;

@@ -68,14 +68,15 @@ error:
 }
 
 static void invoke_engine(struct message_state *ms, sqlite3 *db,
-			  hashtable_t *ht, safetable_t *table)
+			  hashtable_t *ht, safetable_t *table,
+			  safetable_t *event_counter)
 {
-	process_message(ms, db, ht, table);
+	process_message(ms, db, ht, table, event_counter);
 }
 
 static int consume_ms(struct message_state *ms)
 {
-	return IS_MS_COMPLETE(ms) && !IS_MS_GC(ms);
+	return IS_MS_COMPLETE(ms) && (!IS_MS_GC(ms));
 }
 
 void *consumer(void *arg)
@@ -122,7 +123,8 @@ void *consumer(void *arg)
 			    0) {
 				if (consume_ms(ms)) {
 					invoke_engine(ms, db, hash_table,
-						      info->safe_hashtable);
+						      info->safe_hashtable,
+						      info->event_counter);
 					//	err = save_msg(db, hash_table, ms);
 					//	if (err == CODE_SUCCESS) {
 					//		set_saved(ms);

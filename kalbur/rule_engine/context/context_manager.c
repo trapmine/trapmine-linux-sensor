@@ -7,12 +7,9 @@
 
 #include <err.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include "context_manager.h"
 #include "populate.h"
-#include <stdio.h>
-
-// The key of a process is the crc32_hash(tgid_pid, comm)
-#define CONTEXT_KEY_LEN sizeof(uint64_t) + TASK_COMM_LEN
 
 static int try_lock_context(struct process_context *ctx)
 {
@@ -57,14 +54,6 @@ static struct process_context *create_process_context(struct message_state *ms)
 	return ctx;
 }
 
-// We explicitely copy the relevant data needed for process_context hash
-// so that if struct probe_event_header changes, our hashing doesnt break
-#define BUILD_PROCESS_HASH_KEY(key, eh)                                        \
-	__builtin_memset(key, 0, CONTEXT_KEY_LEN);                             \
-	__builtin_memcpy(key, &eh->tgid_pid, sizeof(uint64_t));                \
-	__builtin_memcpy(&(key[sizeof(uint64_t)]), eh->comm,                   \
-			 TYPED_MACRO(TASK_COMM_LEN, UL));
-
 // returns CODE_FAILED if we could not create new context, or place it in hashtable.
 static int get_process_context(safetable_t *ht, struct message_state *ms,
 			       struct process_context **ctx)
@@ -73,7 +62,8 @@ static int get_process_context(safetable_t *ht, struct message_state *ms,
 	struct probe_event_header *eh;
 	unsigned char key[CONTEXT_KEY_LEN];
 
-	ASSERT(ms->complete == 1, "get_process_context: ms->compelte == 0");
+	ASSERT(IS_MS_COMPLETE(ms) == 1,
+	       "get_process_context: ms->compelte == 0");
 
 	eh = (struct probe_event_header *)ms->primary_data;
 	ASSERT(eh != NULL, "get_process_context: eh == NULL");
@@ -141,6 +131,82 @@ delete_ctx:
 	return err;
 }
 
+static void destroy_process_connections(struct process_context *ctx)
+{
+	struct connections *conns, *tmp;
+
+	conns = ctx->open_sockets;
+	while (conns != NULL) {
+		tmp = conns->next;
+		if (conns->sock != NULL)
+			free(conns->sock);
+		if (conns->tcp_info != NULL)
+			free(conns->tcp_info);
+
+		free(conns);
+		conns = tmp;
+	}
+
+	ctx->open_sockets = NULL;
+}
+
+static int destroy_process_context(struct process_context *ctx)
+{
+	int err;
+	if (ctx->cmdline != NULL) {
+		free(ctx->cmdline);
+		ctx->cmdline = NULL;
+	}
+	if (ctx->interpreter != NULL) {
+		free(ctx->interpreter);
+		ctx->interpreter = NULL;
+	}
+	if (ctx->file_path != NULL) {
+		free(ctx->file_path);
+		ctx->file_path = NULL;
+	}
+	if (ctx->parent_path != NULL) {
+		free(ctx->parent_path);
+		ctx->parent_path = NULL;
+	}
+
+	destroy_process_connections(ctx);
+
+	unlock_context(ctx);
+	err = pthread_mutex_destroy(&ctx->ctx_lock);
+	if (err != 0)
+		return CODE_RETRY;
+
+	free(ctx);
+	ctx = NULL;
+
+	return CODE_SUCCESS;
+}
+
+static bool is_fully_consumed(safetable_t *event_counter,
+			      struct message_state *ms)
+{
+	struct probe_event_header *eh;
+	unsigned char key[CONTEXT_KEY_LEN];
+	int64_t ecnt;
+
+	eh = (struct probe_event_header *)ms->primary_data;
+	ASSERT(eh != NULL, "is_fully_consumed: eh == NULL");
+
+	BUILD_PROCESS_HASH_KEY(key, eh);
+	ecnt = (int64_t *)safe_get(event_counter, key, CONTEXT_KEY_LEN);
+	ASSERT(ecnt != 0, "is_fully_consumed: ecnt == 0");
+
+	// If the event count for this process is 1, then only
+	// the final exit event remains to be consumed. If so, then
+	// we must delete this context
+	if (ecnt == 1) {
+		return true;
+	}
+
+	return false;
+}
+
 static bool is_end_of_life_event(struct message_state *ms)
 {
 	struct probe_event_header *eh;
@@ -154,13 +220,38 @@ static bool is_end_of_life_event(struct message_state *ms)
 
 	return false;
 }
-int manage_process_context(safetable_t *ht, struct message_state *ms)
+
+static int detect_and_handle_end_of_life(safetable_t *event_counter,
+					 struct message_state *ms,
+					 struct process_context *ctx)
+{
+	int err;
+	if (is_end_of_life_event(ms)) {
+		if (is_fully_consumed(event_counter, ms)) {
+			// If this is an exit event, and there are no remaining
+			// events for this process, we must delete the context.
+			err = destroy_process_context(ctx);
+		} else {
+			// If this is an exit event, and there are other events
+			// for this process remaining to be consumed ,
+			// we return CODE_RETRY so engine retries for this ms.
+			err = CODE_RETRY;
+		}
+	} else {
+		err = CODE_FAILED;
+	}
+
+	return err;
+}
+
+int manage_process_context(safetable_t *ht, safetable_t *event_counter,
+			   struct message_state *ms)
 {
 	int err;
 	struct process_context *ctx;
 
 	ASSERT(ms != NULL, "add_event_context: ms == NULL");
-	ASSERT(ms->complete == 1, "add_event_context: ms->complete == 0");
+	ASSERT(IS_MS_COMPLETE(ms) == 1, "add_event_context: ms->complete == 0");
 
 	// If ht == NULL, we return CODE_FAILED which causes
 	// ms to transition to MS_IGNORE_CTX_SAVE state.
@@ -180,19 +271,26 @@ int manage_process_context(safetable_t *ht, struct message_state *ms)
 	if (err != CODE_SUCCESS)
 		goto error;
 
-	// only proceeds if context is locked.
+	// only proceed if context is locked.
 	ASSERT(ctx != NULL, "manage_process_context: ctx == NULL");
 
-	if (is_end_of_life_event(ms)) {
-		// If this is an exit event, we return CODE_FAILED
-		// so engine transitions ms to MS_IGNORE_CTX_SAVE.
-		// We do not want to trigger rules for process exit.
-		//
-		// Return to out target, because context needs to be
-		// unlocked.
+	// if exit event, then see if we can remove process context
+	err = detect_and_handle_end_of_life(event_counter, ms, ctx);
+	// if err is CODE_SUCCESS, then context removed. We return
+	// CODE_FAILED to transition engine to MS_IGNORE_CTX_SAVE,
+	// since we do not trigger any rules for exit events.
+	if (err == CODE_SUCCESS) {
 		err = CODE_FAILED;
+		goto error;
+	} else if (err == CODE_RETRY) {
+		// if err is CODE_RETRY, then either context desctruction
+		// needs to be retried, or all events for this process
+		// havent been consumed. So we goto out, to unlock context
+		// and retry later.
 		goto out;
 	}
+	// if CODE_FAILED then not exit event and we go on to populate
+	// context.
 
 	err = add_event_context(ctx, ms);
 out:

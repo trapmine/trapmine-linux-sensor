@@ -24,6 +24,7 @@
 #include <loader.h>
 #include <message_ls.h>
 #include <safe_hash.h>
+#include <stdbool.h>
 
 #define GARBAGE_COLLECT 5000
 #define GARBAGE_COLLECT_LIMIT (GARBAGE_COLLECT * 3)
@@ -157,7 +158,7 @@ static void mark_ms_as_garbage(struct message_state *ms)
 	transition_ms_progress(ms, MS_GC, CODE_SUCCESS);
 }
 
-static void try_garbage_collect(struct msg_list *head)
+static void try_garbage_collect(struct msg_list *head, safetable_t *counter)
 {
 	int err;
 	// acquire lock on msg_list, if all threads are sleeping
@@ -167,7 +168,7 @@ static void try_garbage_collect(struct msg_list *head)
 		printf("calling garbage collect.\n");
 		printf("head->elements: %d\n", head->elements);
 #endif
-		garbage_collect(head, "pause collect");
+		garbage_collect(head, counter);
 		head->wait_for_gc = false;
 		unlock_threads();
 	} else {
@@ -175,15 +176,25 @@ static void try_garbage_collect(struct msg_list *head)
 	}
 }
 
+struct callback_ctx {
+	struct msg_list *head;
+	safetable_t *counter;
+};
+
 static void consume_kernel_events(void *ctx, int cpu, void *data,
 				  unsigned int size)
 {
 	struct probe_event_header eh_local = { 0 };
 	struct message_state *ms;
+	struct callback_ctx *context;
+	safetable_t *counter;
 	struct msg_list *head;
 
-	head = (struct msg_list *)ctx;
+	context = (struct callback_ctx *)ctx;
+	head = context->head;
 	ASSERT(head != NULL, "consume_kernel_events: head == NULL");
+	counter = context->counter;
+	ASSERT(counter != NULL, "consume_kernel_events: counter == NULL");
 
 	// make sure data is more than the event header size.
 	if (size < sizeof(struct probe_event_header))
@@ -206,13 +217,16 @@ static void consume_kernel_events(void *ctx, int cpu, void *data,
 		goto error;
 
 	if (head->elements > GARBAGE_COLLECT) {
-		try_garbage_collect(head);
+		try_garbage_collect(head, counter);
 	}
 
 	// Make sure this is done regardless of whether broadcast_complete()
 	// is called or not. If we don't try this everytime we may miss this
 	// state transition for some messages.
 	transition_ms_progress(ms, MS_COMPLETE, ms->pred(ms));
+
+	// increment event count
+	count_event(ms, counter, true);
 
 	// If we are not waiting for a garbage collect operation, broadcast
 	// message to wake up sleeping threads
@@ -277,7 +291,8 @@ static safetable_t *initialize_safetable(void)
 	return init_safetable();
 }
 
-static void initialize_thread_ls(struct msg_list *head, safetable_t *table)
+static void initialize_thread_ls(struct msg_list *head, safetable_t *table,
+				 safetable_t *counter)
 {
 	size_t i;
 	int err;
@@ -293,6 +308,7 @@ static void initialize_thread_ls(struct msg_list *head, safetable_t *table)
 		}
 
 		threads[i]->safe_hashtable = table;
+		threads[i]->event_counter = counter;
 		threads[i]->ready = false;
 		threads[i]->die = false;
 		threads[i]->head = head;
@@ -320,12 +336,27 @@ static void init_threads(void)
 	}
 }
 
+static struct callback_ctx *initialize_callback_ctx(struct msg_list *head,
+						    safetable_t *counter)
+{
+	struct callback_ctx *ctx = calloc(1UL, sizeof(struct callback_ctx));
+	if (ctx == NULL) {
+		return NULL;
+	}
+
+	ctx->head = head;
+	ctx->counter = counter;
+
+	return ctx;
+}
+
 int main(int argc, char **argv)
 {
 	struct proc_monitor_bpf *skel = NULL;
 	struct msg_list *head = NULL;
 	struct rlimit limit = { 0 };
-	safetable_t *table;
+	safetable_t *table, *counter;
+	struct callback_ctx *ctx;
 	int err;
 
 	/* Kill this process if parent dies */
@@ -373,15 +404,31 @@ int main(int argc, char **argv)
 	if (head == NULL)
 		goto out;
 
+	/* Initialize event counter */
+	counter = initialize_safetable();
+	if (counter == NULL) {
+		fprintf(stderr,
+			"Failed to initialize hashtable for counting process events\n");
+		goto out;
+	}
+
 	/* initialize safetable */
 	table = initialize_safetable();
+	if (table == NULL) {
+		fprintf(stderr,
+			"Failed to initialize hashtable for holding running process context\n");
+		goto out;
+	}
+
+	/* Initialize perf buffer callback context */
+	ctx = initialize_callback_ctx(head, counter);
 
 	/* Initialize threads */
-	initialize_thread_ls(head, table);
+	initialize_thread_ls(head, table, counter);
 	init_threads();
 
 	err = poll_buff(bpf_map__fd(skel->maps.streamer), consume_kernel_events,
-			handle_lost_events, (void *)head);
+			handle_lost_events, (void *)ctx);
 
 out:
 	if (head != NULL)

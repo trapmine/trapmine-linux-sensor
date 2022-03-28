@@ -19,6 +19,7 @@ struct thread_msg {
 	bool die;
 	struct msg_list *head;
 	safetable_t *safe_hashtable;
+	safetable_t *event_counter;
 };
 
 void *consumer(void *arg);
