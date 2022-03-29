@@ -36,7 +36,7 @@ static void free_context(struct process_context *ctx)
 	free(ctx);
 }
 
-static struct process_context *create_process_context(struct message_state *ms)
+static struct process_context *create_process_context(void)
 {
 	struct process_context *ctx;
 	int err;
@@ -84,7 +84,7 @@ static int get_process_context(safetable_t *ht, struct message_state *ms,
 		// create process_context struct. Return CODE_FAILED
 		// in case of failiure, which causes this message_state
 		// not to trigger rules
-		*ctx = create_process_context(ms);
+		*ctx = create_process_context();
 		if (*ctx == NULL) {
 			err = CODE_FAILED;
 			goto error;
@@ -152,6 +152,7 @@ static void destroy_process_connections(struct process_context *ctx)
 
 static int destroy_process_context(struct process_context *ctx)
 {
+	ASSERT(ctx != NULL, "destroy_process_context: ctx == NULL");
 	int err;
 	if (ctx->cmdline != NULL) {
 		free(ctx->cmdline);
@@ -192,6 +193,8 @@ static bool is_fully_consumed(safetable_t *event_counter,
 
 	eh = (struct probe_event_header *)ms->primary_data;
 	ASSERT(eh != NULL, "is_fully_consumed: eh == NULL");
+	ASSERT(IS_EXIT_EVENT(eh->syscall_nr),
+	       "is_fully_consumed: not exit event");
 
 	BUILD_PROCESS_HASH_KEY(key, eh);
 	ecnt = (int64_t)safe_get(event_counter, key, CONTEXT_KEY_LEN);
@@ -206,30 +209,62 @@ static bool is_fully_consumed(safetable_t *event_counter,
 
 	return false;
 }
-
-static bool is_end_of_life_event(struct message_state *ms)
+static void print_context(struct process_context *ctx)
 {
-	struct probe_event_header *eh;
+	struct connections *c;
 
-	eh = (struct probe_event_header *)ms->primary_data;
-	ASSERT(eh != NULL, "is_end_of_life_event: eh == NULL");
+	printf("[%lu] {\n", ctx->tgid_pid);
+	printf("\tpid: %lu\n", ctx->tgid_pid >> 32);
+	printf("\tcomm: %s\n", ctx->comm);
+	printf("\tparent comm: %s\n", ctx->parent_comm);
+	printf("\tcredentials {\n");
+	printf("\t\tuid: %u\n", ctx->credentials.uid);
+	printf("\t\tgid: %u\n", ctx->credentials.gid);
+	printf("\t\teuid: %u\n", ctx->credentials.euid);
+	printf("\t\tegid: %u\n", ctx->credentials.egid);
+	printf("\t}\n");
+	printf("\tcmdline: %s\n", ctx->cmdline);
+	printf("\tinterpreter: %s\n", ctx->interpreter);
+	printf("\tfile path: %s\n", ctx->file_path);
+	printf("\tconnections: {\n");
 
-	if (IS_EXIT_EVENT(eh->syscall_nr)) {
-		return true;
+	c = ctx->open_sockets;
+	while (c != NULL) {
+		printf("\t\tinode num: %lu\n", c->sock->i_ino);
+		printf("\t\ttype: %d\n", c->sock->family);
+		printf("\t\tfamily: %d\n", c->sock->type);
+		printf("\t\tprotocol: %d\n", c->sock->protocol);
+		c = c->next;
 	}
-
-	return false;
+	printf("\t}\n");
+	printf("}\n");
 }
 
 static int detect_and_handle_end_of_life(safetable_t *event_counter,
+					 safetable_t *ht,
 					 struct message_state *ms,
 					 struct process_context *ctx)
 {
+	unsigned char key[CONTEXT_KEY_LEN];
+	struct probe_event_header *eh;
+	void *del_ctx;
 	int err;
-	if (is_end_of_life_event(ms)) {
+
+	eh = (struct probe_event_header *)ms->primary_data;
+	ASSERT(eh != NULL, "is_end_of_life_event: eh == NULL");
+	if (IS_EXIT_EVENT(eh->syscall_nr)) {
 		if (is_fully_consumed(event_counter, ms)) {
+			BUILD_PROCESS_HASH_KEY(key, eh);
+
 			// If this is an exit event, and there are no remaining
 			// events for this process, we must delete the context.
+
+			del_ctx = safe_delete(ht, key, CONTEXT_KEY_LEN);
+			ASSERT(del_ctx != NULL,
+			       "detect_and_handle_end_of_life: del_ctx == NULL");
+
+			ASSERT(del_ctx == ctx,
+			       "detect_and_handle_end_of_life: del_ctx != ctx");
 			err = destroy_process_context(ctx);
 		} else {
 			// If this is an exit event, and there are other events
@@ -275,7 +310,7 @@ int manage_process_context(safetable_t *ht, safetable_t *event_counter,
 	ASSERT(ctx != NULL, "manage_process_context: ctx == NULL");
 
 	// if exit event, then see if we can remove process context
-	err = detect_and_handle_end_of_life(event_counter, ms, ctx);
+	err = detect_and_handle_end_of_life(event_counter, ht, ms, ctx);
 	// if err is CODE_SUCCESS, then context removed. We return
 	// CODE_FAILED to transition engine to MS_IGNORE_CTX_SAVE,
 	// since we do not trigger any rules for exit events.
@@ -293,6 +328,19 @@ int manage_process_context(safetable_t *ht, safetable_t *event_counter,
 	// context.
 
 	err = add_event_context(ctx, ms);
+#ifdef __DEBUG__
+	struct probe_event_header *eh;
+	eh = ms->primary_data;
+	if (err == CODE_SUCCESS) {
+		if ((eh->syscall_nr == SYS_EXECVE) ||
+		    (IS_SOCKET_EVENT(eh->syscall_nr))) {
+			printf("Print context for ms: %s: %lu: %lu: %d\n",
+			       eh->comm, eh->tgid_pid, eh->tgid_pid >> 32, err);
+			print_context(ctx);
+			printf("\n");
+		}
+	}
+#endif
 out:
 	unlock_context(ctx);
 error:

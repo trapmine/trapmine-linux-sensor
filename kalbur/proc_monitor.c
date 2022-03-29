@@ -27,7 +27,6 @@
 #include <stdbool.h>
 
 #define GARBAGE_COLLECT 5000
-#define GARBAGE_COLLECT_LIMIT (GARBAGE_COLLECT * 3)
 
 static struct thread_msg **threads;
 size_t thread_num = 0;
@@ -165,10 +164,12 @@ static void try_garbage_collect(struct msg_list *head, safetable_t *counter)
 	err = attempt_lock_threads();
 	if (err == 0) {
 #ifdef __DEBUG__
-		printf("calling garbage collect.\n");
-		printf("head->elements: %d\n", head->elements);
+		printf("try_garbage_collect: precollect: head->elements: %d\n",
+		       head->elements);
 #endif
 		garbage_collect(head, counter);
+		printf("try_garbage_collect: postcollect: head->elements: %d\n",
+		       head->elements);
 		head->wait_for_gc = false;
 		unlock_threads();
 	} else {
