@@ -458,6 +458,11 @@ out:
 	return err;
 }
 
+MESSAGE_HANDLER_FUNC(save_exit_event)
+{
+	return CODE_SUCCESS;
+}
+
 int save_msg(sqlite3 *db, hashtable_t *hash_table, struct message_state *ms)
 {
 	ASSERT(ms->primary_data != NULL, "save_msg: ms->primary_data == NULL");
@@ -491,6 +496,8 @@ int save_msg(sqlite3 *db, hashtable_t *hash_table, struct message_state *ms)
 		return write_mmap_dump_to_file(ms);
 	case (LPE_COMMIT_CREDS):
 		return save_lpe_commit_creds_event(db, hash_table, ms);
+	case (EXIT_EVENT):
+		return save_exit_event(db, hash_table, ms);
 	default:
 		fprintf(stderr, "Unexpected syscall: %d\n", eh->syscall_nr);
 		return CODE_FAILED;

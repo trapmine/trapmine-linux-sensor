@@ -124,4 +124,11 @@ COMPLETE_PRED(is_modprobe_overwrite_complete)
 	return CODE_FAILED;
 }
 
+COMPLETE_PRED(is_exit_complete)
+{
+	if (ms->primary_data != NULL)
+		return CODE_SUCCESS;
+
+	return CODE_FAILED;
+}
 #endif

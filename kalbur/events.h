@@ -157,6 +157,10 @@ struct process_info {
 	struct stdio io[3];
 };
 
+struct exit_event {
+	struct probe_event_header eh;
+};
+
 struct socket_create {
 	struct probe_event_header eh;
 	u64_t i_ino;

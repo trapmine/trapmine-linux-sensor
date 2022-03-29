@@ -76,6 +76,8 @@ struct message_state *allocate_message_struct(int syscall, int cpu)
 		ms->pred = is_lpe_commit_creds_complete;
 	else if (syscall == MODPROBE_OVERWRITE)
 		ms->pred = is_modprobe_overwrite_complete;
+	else if (syscall == EXIT_EVENT)
+		ms->pred = is_exit_complete;
 	else { // This case should never happen thus the strange assert
 		ASSERT(1 == 0, "allocate_message_struct: unexpected syscall");
 		goto error;

@@ -79,12 +79,16 @@ struct mmap_dump_fmt {
 			copy = sizeof(struct kernel_module_load_info);         \
 		else if (syscall == MODPROBE_OVERWRITE)                        \
 			copy = sizeof(struct modprobe_overwrite);              \
+		else if (syscall == EXIT_EVENT)                                \
+			copy = sizeof(struct exit_event);                      \
 		else                                                           \
 			ASSERT(0 == 1,                                         \
 			       "SYSCALL_PRIMARY_STRUCT: Invalid syscall");     \
 	} while (0)
 
 typedef int (*message_complete_predicate)(struct message_state *);
+
+#define STALE_LIMIT 3
 
 #define MS_COMPLETE (1UL << 0)
 #define MS_CTX_SAVED (1UL << 1)
@@ -97,6 +101,7 @@ typedef int (*message_complete_predicate)(struct message_state *);
 #define IS_MS_CTX_SAVED(ms) (((ms->progress) & (MS_CTX_SAVED)) != 0)
 #define IS_MS_GC(ms) (((ms->progress) & (MS_GC)) != 0)
 #define IS_MS_IGNORE_CTX_SAVE(ms) (((ms->progress) & MS_IGNORE_CTX_SAVE) != 0)
+#define IS_MS_STALE(ms) ((ms->stale) >= STALE_LIMIT)
 
 struct message_state {
 	pthread_mutex_t message_state_lock;
@@ -117,6 +122,7 @@ struct message_state {
 		*next_gc; // Optimization to quickly find struct to free
 	int cpu;
 	uint64_t progress;
+	unsigned int stale;
 };
 
 int construct_message_state(struct message_state *ms,
