@@ -177,9 +177,7 @@ struct message_state *get_message(struct msg_list *head,
 {
 	struct message_state *ms;
 	struct probe_event_header *eh;
-	struct message_state *prev_gc;
 	ms = head->first;
-	prev_gc = NULL;
 
 	ASSERT(head != NULL, "get_message: head == NULL");
 	ASSERT(eh_incoming != NULL, "get_message: eh_incoming == NULL");
@@ -194,19 +192,8 @@ struct message_state *get_message(struct msg_list *head,
 				ASSERT(IS_MS_GC(ms) == 0,
 				       "get_message: IS_MS_GC == 1");
 				return ms;
-			} else // If ms->complete and event headers are equal, then ignore
+			} else // If ms is complete and event headers are equal, then ignore
 				return NULL;
-		}
-
-		// Link saved messages together
-		// so freeing later is simpler
-		if (IS_MS_GC(ms)) {
-			if (prev_gc == NULL)
-				prev_gc = ms;
-			else {
-				prev_gc->next_gc = ms;
-				prev_gc = ms;
-			}
 		}
 
 		ms = ms->next_msg;
@@ -234,6 +221,9 @@ void count_event(struct message_state *ms, safetable_t *counter, bool inc)
 	if (inc) {
 		safe_put(counter, key, (void *)(ecnt + 1), CONTEXT_KEY_LEN);
 	} else {
+		// only decrement when message is gc
+		ASSERT(IS_MS_GC(ms) != 0, "count_event: ms not gc");
+
 		ASSERT(ecnt > 0, "count_event: counter <= 0");
 		if ((ecnt - 1) == 0) {
 			safe_delete(counter, key, CONTEXT_KEY_LEN);
@@ -250,22 +240,63 @@ void garbage_collect(struct msg_list *head, safetable_t *counter)
 	struct message_state *ms;
 	struct message_state *tmp;
 
-	ms = head->first;
-	while (!IS_MS_GC(ms))
-		ms = ms->next_msg;
+#ifdef __DEBUG__
+	int complete = 0;
+	int ctx_saved = 0;
+	int db_saved = 0;
+	int gc = 0;
+	int igctx = 0;
+	int stale = 0;
+#endif
 
-	if (ms == NULL)
-		return;
+	ms = head->first;
 
 	while (ms != NULL) {
-		tmp = ms->next_gc;
+		tmp = ms->next_msg;
+
+#ifdef __DEBUG__
+		if (IS_MS_COMPLETE(ms))
+			complete += 1;
+		if (IS_MS_DB_SAVED(ms))
+			db_saved += 1;
+		if (IS_MS_CTX_SAVED(ms))
+			ctx_saved += 1;
+		if (IS_MS_IGNORE_CTX_SAVE(ms))
+			igctx += 1;
+#endif
+
+		// if message is complete, and db saved
+		// increment stale count.
+		// If stale count reaches STALE limit, we
+		// consider the event to be garbage
+		// This technique helps us flush events for
+		// processes started before the sensor
+		if ((IS_MS_COMPLETE(ms)) && (IS_MS_DB_SAVED(ms))) {
+			ms->stale += 1;
+		}
+
+		if (IS_MS_STALE(ms)) {
+#ifdef __DEBUG__
+			stale += 1;
+#endif
+			transition_ms_progress(ms, MS_GC, CODE_SUCCESS);
+		}
 
 		// decrement counter and remove message
-		count_event(ms, counter, false);
-		remove_message_from_list(head, &ms);
-
+		if (IS_MS_GC(ms)) {
+#ifdef __DEBUG__
+			gc += 1;
+#endif
+			count_event(ms, counter, false);
+			remove_message_from_list(head, &ms);
+		}
 		ms = tmp;
 	}
+
+#ifdef __DEBUG__
+	printf("complete: %d\nctx saved: %d\ndb saved: %d\ngc: %d\nignore ctx: %d\nstale: %d\n\n",
+	       complete, ctx_saved, db_saved, gc, igctx, stale);
+#endif
 }
 
 void *delete_message_list(struct msg_list *head)

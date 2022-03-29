@@ -118,8 +118,6 @@ struct message_state {
 	struct message_state *next_msg;
 	struct message_state
 		*prev_msg; // Needed inorder to link and unlink new messages
-	struct message_state
-		*next_gc; // Optimization to quickly find struct to free
 	int cpu;
 	uint64_t progress;
 	unsigned int stale;
