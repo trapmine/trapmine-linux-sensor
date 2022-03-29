@@ -38,16 +38,6 @@ PROC_MONITOR_LINK_FLAGS = -lelf -lz -ldl -lpthread -lm
 CLANG_BPF_SYS_INCLUDES = $(shell $(CLANG) -v -E - < /dev/null 2>&1 \
 			 | sed -n '/<...> search starts here:/,/End of search list./{ s| \(/.*\)|-idirafter \1|p }')
 
-ifeq ($(DEBUG),bpf)
-	DEBUG_FLAG = -D__DEBUG_BPF__
-else ifeq ($(DEBUG),user)
-	DEBUG_FLAG = -D__DEBUG__
-else ifeq ($(DEBUG),all)
-	DEBUG_FLAG = -D__DEBUG__ -D__DEBUG_BPF__
-else
-	DEBUG_FLAG =
-endif
-
 ## TEMP FLAGS START. REMOVE LATER
 
 ifeq ($(SINGULAR),y)

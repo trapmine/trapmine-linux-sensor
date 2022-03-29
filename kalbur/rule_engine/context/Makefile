@@ -9,11 +9,11 @@ all: $(MANAGER).o $(POPULATE).o
 
 $(MANAGER).o: $(MANAGER).h $(MANAGER).c
 	$(call msg,CC,$@)
-	$(Q)$(CC) -DAPPLY_ASSERT $(CFLAGS) $(INCLUDES) -c $(MANAGER).c -o $@
+	$(Q)$(CC) -DAPPLY_ASSERT $(DEBUG_FLAG) $(CFLAGS) $(INCLUDES) -c $(MANAGER).c -o $@
 
 $(POPULATE).o: $(POPULATE).h $(POPULATE).c
 	$(call msg,CC,$@)
-	$(Q)$(CC) -DAPPLY_ASSERT $(CFLAGS) $(INCLUDES) -c $(POPULATE).c -o $@
+	$(Q)$(CC) -DAPPLY_ASSERT $(DEBUG_FLAG) $(CFLAGS) $(INCLUDES) -c $(POPULATE).c -o $@
 
 clean:
 	$(Q)rm -f *.o

@@ -19,11 +19,11 @@ $(CONTEXT):
 
 $(ENGINE).o: $(ENGINE).c $(ENGINE).h
 	$(call msg,ENGINE,$@)
-	$(Q)$(CC) -DAPPLY_ASSERT $(CFLAGS) $(INCLUDES) -c $(ENGINE).c -o $@
+	$(Q)$(CC) -DAPPLY_ASSERT $(DEBUG_FLAG) $(CFLAGS) $(INCLUDES) -c $(ENGINE).c -o $@
 
 $(SAVE_MS).o: $(SAVE_MS).c $(SAVE_MS).h
 	$(call msg,SAVE_MS,$@)
-	$(Q)$(CC) -DAPPLY_ASSERT $(CFLAGS) -DAPPLY_ASSERT $(INCLUDES) -c $(SAVE_MS).c -o $@
+	$(Q)$(CC) -DAPPLY_ASSERT $(DEBUG_FLAG) $(CFLAGS) $(INCLUDES) -c $(SAVE_MS).c -o $@
 
 clean:
 	$(call, msg,CLEAN)

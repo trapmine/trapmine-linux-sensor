@@ -9,6 +9,17 @@ else
 			"$(if $(3), $(3))"; 
 endif
 
+ifeq ($(DEBUG),bpf)
+	DEBUG_FLAG = -D__DEBUG_BPF__
+else ifeq ($(DEBUG),user)
+	DEBUG_FLAG = -D__DEBUG__
+else ifeq ($(DEBUG),all)
+	DEBUG_FLAG = -D__DEBUG__ -D__DEBUG_BPF__
+else
+	DEBUG_FLAG =
+endif
+
+
 KALBUR := kalbur
 RULE_ENGINE_DIR := rule_engine
 UTIL := util
