@@ -88,7 +88,7 @@ struct mmap_dump_fmt {
 
 typedef int (*message_complete_predicate)(struct message_state *);
 
-#define STALE_LIMIT 3
+#define STALE_LIMIT 20
 
 #define MS_COMPLETE (1UL << 0)
 #define MS_CTX_SAVED (1UL << 1)
