@@ -226,8 +226,9 @@ static void consume_kernel_events(void *ctx, int cpu, void *data,
 	// state transition for some messages.
 	transition_ms_progress(ms, MS_COMPLETE, ms->pred(ms));
 
-	// increment event count
-	count_event(ms, counter, true);
+	// if a message was completed, incremented the process event counter
+	if (IS_MS_COMPLETE(ms))
+		count_event(ms, counter, true);
 
 	// If we are not waiting for a garbage collect operation, broadcast
 	// message to wake up sleeping threads
