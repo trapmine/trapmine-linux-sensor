@@ -75,8 +75,7 @@ static int get_process_context(safetable_t *ht, struct message_state *ms,
 		// Since events maybe consumed out of order, we may
 		// receive an event for a process whose context is
 		// not yet created. In this case we retry later.
-		if (!((eh->syscall_nr == SYS_EXECVE) ||
-		      IS_FORK_OR_FRIENDS(eh->syscall_nr))) {
+		if (!IS_PROCESS_LAUNCH(eh->syscall_nr)) {
 			err = CODE_RETRY;
 			goto error;
 		}
@@ -158,6 +157,10 @@ static int destroy_process_context(struct process_context *ctx)
 		free(ctx->cmdline);
 		ctx->cmdline = NULL;
 	}
+	if (ctx->environment != NULL) {
+		free(ctx->environment);
+		ctx->environment = NULL;
+	}
 	if (ctx->interpreter != NULL) {
 		free(ctx->interpreter);
 		ctx->interpreter = NULL;
@@ -217,6 +220,7 @@ static void print_context(struct process_context *ctx)
 	printf("\tpid: %lu\n", ctx->tgid_pid >> 32);
 	printf("\tcomm: %s\n", ctx->comm);
 	printf("\tparent comm: %s\n", ctx->parent_comm);
+	printf("\tparent tgid_pid: %lu\n", ctx->parent_pid);
 	printf("\tcredentials {\n");
 	printf("\t\tuid: %u\n", ctx->credentials.uid);
 	printf("\t\tgid: %u\n", ctx->credentials.gid);
@@ -224,6 +228,7 @@ static void print_context(struct process_context *ctx)
 	printf("\t\tegid: %u\n", ctx->credentials.egid);
 	printf("\t}\n");
 	printf("\tcmdline: %s\n", ctx->cmdline);
+	printf("\tenvironment: %s\n", ctx->environment);
 	printf("\tinterpreter: %s\n", ctx->interpreter);
 	printf("\tfile path: %s\n", ctx->file_path);
 	printf("\tconnections: {\n");
@@ -262,6 +267,10 @@ static int detect_and_handle_end_of_life(safetable_t *event_counter,
 			del_ctx = safe_delete(ht, key, CONTEXT_KEY_LEN);
 			ASSERT(del_ctx != NULL,
 			       "detect_and_handle_end_of_life: del_ctx == NULL");
+			//#ifdef __DEBUG__
+			//			print_context(ctx);
+			//			printf("\n");
+			//#endif
 
 			ASSERT(del_ctx == ctx,
 			       "detect_and_handle_end_of_life: del_ctx != ctx");
@@ -328,19 +337,16 @@ int manage_process_context(safetable_t *ht, safetable_t *event_counter,
 	// context.
 
 	err = add_event_context(ctx, ms);
-#ifdef __DEBUG__
-	struct probe_event_header *eh;
-	eh = ms->primary_data;
-	if (err == CODE_SUCCESS) {
-		if ((eh->syscall_nr == SYS_EXECVE) ||
-		    (IS_SOCKET_EVENT(eh->syscall_nr))) {
-			printf("Print context for ms: %s: %lu: %lu: %d\n",
-			       eh->comm, eh->tgid_pid, eh->tgid_pid >> 32, err);
-			print_context(ctx);
-			printf("\n");
-		}
-	}
-#endif
+//#ifdef __DEBUG__
+//	struct probe_event_header *eh;
+//	eh = ms->primary_data;
+//	if (err == CODE_SUCCESS) {
+//		printf("Print context for ms: %s: %d: %lu: %d\n", eh->comm,
+//		       eh->syscall_nr, eh->tgid_pid >> 32, err);
+//		print_context(ctx);
+//		printf("\n");
+//	}
+//#endif
 out:
 	unlock_context(ctx);
 error:

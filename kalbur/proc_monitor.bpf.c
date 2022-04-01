@@ -24,16 +24,17 @@
 #define EBPFUNBOUNDEDMEMACCESS 142
 #define INVALIDWRITE 143
 #define CTXINVALIDARG 144
+#define EBPFHELPERNULLVAL 145
 
 /* Max possible size of array value is 1 << 25
  * https://elixir.bootlin.com/linux/v4.18/source/kernel/bpf/arraymap.c#L57
  * The array is allocated via kmalloc, which allocates contiguous memory.
  * So max size is 1 << KMALLOC_MAX_SIZE (upper bound 1 << 25) */
 
-/* Max number of allowed args is something ridiculous
- * like PAGE_SIZE * 32 bytes.
- * This ought to be enough */
-#define MAX_ARGS_READ 10
+///* Max number of allowed args is something ridiculous
+// * like PAGE_SIZE * 32 bytes.
+// * This ought to be enough */
+//#define MAX_ARGS_READ 10
 
 // 15 path length keeps us at the instruction count limit
 #define MAX_PATH_LENGTH 15
@@ -127,12 +128,16 @@ struct syscall_execve_ctx {
 	long envp_str_arr_ptr;
 };
 
-struct syscall_enter_fork_clone_ctx {
+struct syscall_enter_fork_ctx {
+	u64 unused;
+	int syscall_nr;
+};
+
+struct syscall_enter_clone_ctx {
 	u64 unused;
 	int syscall_nr;
 	unsigned long clone_flags;
 };
-
 struct syscall_enter_mmap_ctx {
 	u64 unused;
 	int syscall_nr;
@@ -537,23 +542,19 @@ out:
 __attribute__((always_inline)) static int
 save_str_to_buff(u32 buff_indx, u32 buff_num, char *str)
 {
-	int str_size;
 	u32 rem_buff_size;
-	long err;
+	u64 indx;
 	str_buff_t *buffer;
-	long indx = 0;
-	str_size = 0;
+	int str_size = 0;
 
 	indx = (buff_num * (PER_CPU_STR_BUFFSIZE)) + buff_indx;
-	if ((indx > ((PER_CPU_STR_BUFFSIZE)*MAX_EVENT_BUFFERS)) || (indx < 0)) {
+	if (indx > (PER_CPU_STR_BUFFSIZE * MAX_EVENT_BUFFERS)) {
 		str_size = -EBPFUNBOUNDEDMEMACCESS;
 		goto out;
 	}
 
-	buff_indx = buff_indx % (PER_CPU_STR_BUFFSIZE);
-	rem_buff_size =
-		((PER_CPU_STR_BUFFSIZE)-1) -
-		buff_indx; // Last byte should always be 0, to ensure null termination
+	rem_buff_size = (PER_CPU_STR_BUFFSIZE - 1) - buff_indx;
+	rem_buff_size = rem_buff_size % PER_CPU_STR_BUFFSIZE;
 
 	u32 map_num = 0;
 	buffer = bpf_map_lookup_elem(&str_buffs_map, &map_num);
@@ -572,7 +573,7 @@ out:
 __attribute__((always_inline)) static u32 save_str(char *str, u32 buff_num)
 {
 	int buff_indx;
-	long update_err;
+	long err;
 	int str_size;
 	u32 new_indx;
 
@@ -592,47 +593,48 @@ __attribute__((always_inline)) static u32 save_str(char *str, u32 buff_num)
 
 	new_indx = str_size + buff_indx;
 
-	if ((update_err = set_str_buff_indx(buff_num, new_indx)))
-		str_size = update_err;
+	err = set_str_buff_indx(buff_num, new_indx);
+	if (err < 0)
+		str_size = 0;
 out:
 	return str_size;
 }
 
-__attribute__((always_inline)) static u64
-save_str_arr_to_buff(u32 buff_num, unsigned long *args)
-{
-	char *arg_str;
-	long err;
-	unsigned long scnt;
-	u64 nbyte_pair;
-	u32 strs, s;
-
-	strs = 0;
-	scnt = 0;
-#pragma clang loop unroll(full)
-	for (unsigned int i = 0; i < MAX_ARGS_READ; ++i) {
-		if (args == 0)
-			goto out;
-
-		err = bpf_probe_read(&arg_str, sizeof(char *), args);
-		JUMP_TARGET(out);
-
-		if (!arg_str) {
-			goto out;
-		}
-
-		s = save_str(arg_str, buff_num);
-		if (s > 0)
-			strs += s;
-
-		scnt++;
-
-		args++;
-	}
-
-out:
-	return (scnt << 32) | strs;
-}
+//__attribute__((always_inline)) static u64
+//save_str_arr_to_buff(u32 buff_num, unsigned long *args)
+//{
+//	char *arg_str;
+//	long err;
+//	unsigned long scnt;
+//	u64 nbyte_pair;
+//	u32 strs, s;
+//
+//	strs = 0;
+//	scnt = 0;
+//#pragma clang loop unroll(full)
+//	for (unsigned int i = 0; i < MAX_ARGS_READ; ++i) {
+//		if (args == 0)
+//			goto out;
+//
+//		err = bpf_probe_read(&arg_str, sizeof(char *), args);
+//		JUMP_TARGET(out);
+//
+//		if (!arg_str) {
+//			goto out;
+//		}
+//
+//		s = save_str(arg_str, buff_num);
+//		if (s > 0)
+//			strs += s;
+//
+//		scnt++;
+//
+//		args++;
+//	}
+//
+//out:
+//	return (scnt << 32) | strs;
+//}
 
 __attribute__((always_inline)) static long
 save_orig_name(u32 str_buff_num, u32 path_size, const unsigned char *name)
@@ -768,10 +770,10 @@ error:
 	return pathlen_pathoffset;
 }
 
-__attribute__((always_inline)) static long save_event_metadata(event_t *emd)
+__attribute__((always_inline)) static long save_event_metadata(event_t *emd,
+							       u64 tgid_pid)
 {
 	long err;
-	u64 tgid_pid = bpf_get_current_pid_tgid();
 
 	err = bpf_map_update_elem(&event_metadata_map, &tgid_pid, emd,
 				  BPF_NOEXIST);
@@ -783,9 +785,6 @@ __attribute__((always_inline)) static long
 handle_syscall_exit(void *syscall_data_map, event_t *emeta, u64 tgid)
 {
 	long err;
-
-	u32 cpu = bpf_get_smp_processor_id();
-	u32 buff = 0;
 	if (emeta != NULL) {
 		// clean event information
 		err = bpf_map_delete_elem(&event_metadata_map, &tgid);
@@ -810,9 +809,9 @@ handle_syscall_exit(void *syscall_data_map, event_t *emeta, u64 tgid)
 
 	if (syscall_data_map != NULL) {
 		err = bpf_map_delete_elem(syscall_data_map, &tgid);
-		LOG(err,
-		    "handle_syscall_exit: Failed to delete event information entry from map for syscall=%d: %d\n",
-		    err, emeta->syscall_nr);
+		//LOG(err,
+		//    "handle_syscall_exit: Failed to delete event information entry from map for syscall=%d: %d\n",
+		//    err, emeta->syscall_nr);
 	} else
 		err = 0;
 
@@ -841,20 +840,31 @@ out:
 	return tgid;
 }
 
-__attribute__((always_inline)) static u64 get_ppid()
+__attribute__((always_inline)) static struct task_struct *
+get_parent_task(struct task_struct *tsk)
+{
+	struct task_struct *parent_task;
+	int err;
+
+	err = bpf_core_read(&parent_task, sizeof(struct task_struct *),
+			    &tsk->real_parent);
+	if (err < 0)
+		return 0;
+
+	return parent_task;
+}
+
+__attribute__((always_inline)) static u64
+get_ppid_of_task(struct task_struct *tsk)
 {
 	u64 tgid_pid;
 	u32 pid;
 	long err;
-	struct task_struct *task;
 	struct task_struct *parent_task;
 
-	task = (struct task_struct *)bpf_get_current_task();
-
-	err = bpf_core_read(&parent_task, sizeof(parent_task),
-			    &(task->real_parent));
-	if (err < 0) {
-		tgid_pid = err;
+	parent_task = get_parent_task(tsk);
+	if (parent_task == 0) {
+		tgid_pid = 0;
 		goto out;
 	}
 
@@ -877,8 +887,8 @@ out:
 }
 
 __attribute__((always_inline)) static void
-initialize_event_header(struct probe_event_header *eh, int syscall_nr,
-			u64 tgid_pid)
+initialize_event_header(struct probe_event_header *eh, u64 tgid_pid,
+			int syscall_nr)
 {
 	eh->tgid_pid = tgid_pid;
 	eh->syscall_nr = syscall_nr;
@@ -941,15 +951,16 @@ initialize_str_buffer(struct probe_event_header *eh_primary, int syscall_nr,
 		      u64 tgid_pid, u32 buff_num)
 {
 	int buff_indx;
-	long indx;
+	u32 indx;
 	str_buff_t *buffer;
 	int err;
 	u32 new_indx;
+	unsigned char *buff;
 	struct probe_event_header eh;
 
 	eh.event_time = eh_primary->event_time;
 	eh.syscall_nr = eh_primary->syscall_nr;
-	eh.tgid_pid = eh_primary->tgid_pid;
+	eh.tgid_pid = tgid_pid;
 	bpf_get_current_comm(eh.comm, TASK_COMM_LEN);
 	eh.data_type = String_Data;
 
@@ -959,16 +970,18 @@ initialize_str_buffer(struct probe_event_header *eh_primary, int syscall_nr,
 		goto out;
 	}
 
-	indx = (buff_num * (PER_CPU_STR_BUFFSIZE)) + buff_indx;
-	if ((indx > ((PER_CPU_STR_BUFFSIZE)*MAX_EVENT_BUFFERS)) || (indx < 0)) {
-		err = -EBPFUNBOUNDEDMEMACCESS;
-		goto out;
-	}
-
 	u32 map_num = 0;
 	buffer = bpf_map_lookup_elem(&str_buffs_map, &map_num);
 	if (buffer == 0) {
 		err = -EBPFLOOKUPFAIL;
+		goto out;
+	}
+
+	indx = (buff_num * PER_CPU_STR_BUFFSIZE) + buff_indx;
+	if (indx < (PER_CPU_STR_BUFFSIZE * MAX_EVENT_BUFFERS)) {
+		buff = &(buffer->buff[indx]);
+	} else {
+		err = -EBPFUNBOUNDEDMEMACCESS;
 		goto out;
 	}
 
@@ -993,14 +1006,8 @@ initialize_event(event_t *emeta, u64 tgid_pid, int syscall_nr)
 
 	emeta->syscall_nr = syscall_nr;
 
-	err = save_event_metadata(emeta);
-
+	err = save_event_metadata(emeta, tgid_pid);
 out:
-	if (err != 0) {
-		SINGULAR("[%ld] save event metadata failed: %d\n", tgid_pid,
-			 err);
-	}
-
 	return err;
 }
 
@@ -1031,27 +1038,233 @@ out:
 	return 0;
 }
 
-__attribute__((always_inline)) static void
-handle_fork_enter(struct syscall_enter_fork_clone_ctx *ctx)
+__attribute__((always_inline)) static struct file *
+get_underlying_file_of_task(struct task_struct *tsk)
 {
-	proc_info_t info = {};
-	u64 tgid_pid;
+	struct file *f;
+	int err;
 
-	tgid_pid = bpf_get_current_pid_tgid();
-
-	initialize_event_header(&(info.cpinfo.eh), ctx->syscall_nr, tgid_pid);
-
-	bpf_map_update_elem(&proc_info_map, &tgid_pid, &info, BPF_NOEXIST);
+	err = BPF_CORE_READ_INTO(&f, tsk, mm, exe_file);
+	if (err < 0)
+		f = 0;
+out:
+	return f;
 }
 
 __attribute__((always_inline)) static void
-handle_fork_exit(struct syscall_exit_fork_clone_ctx *ctx)
+handle_fork_clone_enter(struct syscall_enter_fork_ctx *ctx,
+			unsigned long clone_flags)
 {
+	struct task_struct *tsk;
 	u64 tgid_pid;
+	int err;
+	struct process_info pinfo = { 0 };
 
 	tgid_pid = bpf_get_current_pid_tgid();
-	handle_syscall_exit(&proc_info_map, NULL, tgid_pid);
+
+	// We want to set the eh.tgid_pid to the tgid_pid of the new
+	// process. We will do that later, during syscall exit.
+	initialize_event_header(&pinfo.eh, 0, ctx->syscall_nr);
+
+	// set clone flags if clone syscall
+	if (clone_flags != 0)
+		pinfo.clone_flags = clone_flags;
+	else
+		pinfo.clone_flags = 0;
+
+	// set ppid. If CLONE_PARENT flag set, ppid is the tgid_pid
+	// of the parent process of current.
+	// Otherwise ppid is set to the tgid_pid of current.
+	if (clone_flags & CLONE_PARENT) {
+		tsk = (struct task_struct *)bpf_get_current_task();
+		if (tsk != NULL)
+			pinfo.ppid = get_ppid_of_task(tsk);
+		else {
+			bpf_printk("tsk is NULL\n");
+			goto out;
+		}
+	} else {
+		pinfo.ppid = tgid_pid;
+	}
+
+	// save pinfo with the tgid_pid of the parent, since we donot know
+	// the tgid_pid of the new process yet.
+	err = bpf_map_update_elem(&proc_info_map, &pinfo.ppid, &pinfo,
+				  BPF_NOEXIST);
+out:
 	return;
+}
+
+__attribute__((always_inline)) static int calculate_write_indx(u32 buff_indx,
+							       u32 buff_num)
+{
+	int indx;
+	int max;
+
+	if (indx > max) {
+		return -EBPFUNBOUNDEDMEMACCESS;
+	}
+
+	return indx % max;
+}
+
+__attribute__((always_inline)) static int
+save_mem_to_buff(u32 buff_indx, u32 buff_num, void *mem, u32 mem_sz)
+{
+	int mem_size, err;
+	unsigned char *buff;
+	str_buff_t *buffer;
+	u64 indx = 0;
+
+	u32 map_num = 0;
+	buffer = bpf_map_lookup_elem(&str_buffs_map, &map_num);
+	if (buffer == 0) {
+		mem_size = -EBPFLOOKUPFAIL;
+		goto out;
+	}
+
+	indx = (buff_num * PER_CPU_STR_BUFFSIZE) + buff_indx;
+	if (indx < (PER_CPU_STR_BUFFSIZE * MAX_EVENT_BUFFERS)) {
+		buff = &(buffer->buff[indx]);
+	} else {
+		mem_size = -EBPFUNBOUNDEDMEMACCESS;
+		goto out;
+	}
+
+	mem_size = mem_sz % PER_CPU_STR_BUFFSIZE;
+
+	err = bpf_probe_read(buff, mem_size, mem);
+	if (err < 0) {
+		mem_size = 0;
+		goto out;
+	}
+out:
+	return mem_size;
+}
+
+__attribute__((always_inline)) static u64 save_mem(void *mem, u32 buff_num,
+						   unsigned long mem_start,
+						   unsigned long mem_end)
+{
+	int buff_indx;
+	long err;
+	int mem_size;
+	u64 offset_bytes;
+	u32 new_indx;
+
+	offset_bytes = (LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE) << 32) | 0;
+
+	if (mem_end < mem_start)
+		goto out;
+
+	buff_indx = get_str_buff_indx(buff_num);
+	if (buff_indx < 0)
+		goto out;
+
+	mem_size = save_mem_to_buff(buff_indx, buff_num, mem,
+				    (mem_end - mem_start));
+	if (mem_size <= 0)
+		goto out;
+
+	new_indx = mem_size + buff_indx;
+	err = set_str_buff_indx(buff_num, new_indx);
+	if (err < 0)
+		mem_size = 0;
+
+	offset_bytes = buff_indx;
+	offset_bytes = (offset_bytes << 32) | mem_size;
+out:
+	return offset_bytes;
+}
+
+__attribute__((always_inline)) static long
+copy_args_env(event_t *emeta, struct process_info *pinfo)
+{
+	u32 bytes_written;
+	struct task_struct *tsk;
+	struct mm_struct *mm;
+	unsigned long arg_start, arg_end, env_start, env_end;
+	u64 offset_bytes;
+	int err;
+
+	tsk = (struct task_struct *)bpf_get_current_task();
+	if (tsk == NULL)
+		return -EBPFHELPERNULLVAL;
+
+	err = bpf_core_read(&mm, sizeof(struct mm_struct *), &tsk->mm);
+	JUMP_TARGET(out);
+
+	err = bpf_core_read(&arg_start, sizeof(unsigned long), &mm->arg_start);
+	JUMP_TARGET(out);
+	err = bpf_core_read(&arg_end, sizeof(unsigned long), &mm->arg_end);
+	JUMP_TARGET(out);
+
+	offset_bytes =
+		save_mem((void *)arg_start, emeta->wbuff, arg_start, arg_end);
+	pinfo->args.nbytes = offset_bytes & 0xffffffff;
+	pinfo->args.argv_offset = offset_bytes >> 32;
+
+	err = bpf_core_read(&env_start, sizeof(unsigned long), &mm->env_start);
+	JUMP_TARGET(out);
+	err = bpf_core_read(&env_end, sizeof(unsigned long), &mm->env_end);
+	JUMP_TARGET(out);
+
+	offset_bytes =
+		save_mem((void *)env_start, emeta->wbuff, env_start, env_end);
+	pinfo->env.nbytes = offset_bytes & 0xffffffff;
+	pinfo->env.env_offset = offset_bytes >> 32;
+
+out:
+	return err;
+}
+__attribute__((always_inline)) static long
+save_credentials(struct cred *credentials, struct process_info *new_pinfo)
+{
+	uid_t uid, euid;
+	gid_t gid, egid;
+	long err;
+
+	err = bpf_core_read(&uid, sizeof(uid_t), &credentials->uid);
+	JUMP_TARGET(out);
+
+	err = bpf_core_read(&gid, sizeof(gid_t), &credentials->gid);
+	JUMP_TARGET(out);
+
+	err = bpf_core_read(&euid, sizeof(uid_t), &credentials->euid);
+	JUMP_TARGET(out);
+
+	err = bpf_core_read(&egid, sizeof(gid_t), &credentials->egid);
+	JUMP_TARGET(out);
+
+	new_pinfo->credentials.uid = uid;
+	new_pinfo->credentials.gid = gid;
+	new_pinfo->credentials.euid = euid;
+	new_pinfo->credentials.egid = egid;
+out:
+	return err;
+}
+
+__attribute__((always_inline)) static long
+save_file_info(struct file *f, struct file_info *finfo)
+{
+	unsigned long i_ino;
+	unsigned long smg;
+	long err;
+
+	i_ino = 0;
+	smg = 0;
+
+	err = BPF_CORE_READ_INTO(&i_ino, f, f_inode, i_ino);
+	JUMP_TARGET(out);
+
+	err = BPF_CORE_READ_INTO(&smg, f, f_inode, i_sb, s_magic);
+	JUMP_TARGET(save);
+save:
+	finfo->i_ino = i_ino;
+	finfo->s_magic = smg;
+
+out:
+	return err;
 }
 
 __attribute__((always_inline)) static int
@@ -1144,19 +1357,10 @@ out:
 	return err;
 }
 
-__attribute__((always_inline)) static long calc_mmap_cnt(u32 buff_num,
-							 u64 tgid_pid)
+__attribute__((always_inline)) static long calc_mmap_cnt(u32 buff_num)
 {
-	long err;
+	int err;
 	int map_cnt;
-	struct process_info new_p = {};
-	struct process_info *pinfo;
-
-	pinfo = bpf_map_lookup_elem(&proc_info_map, &tgid_pid);
-	if (pinfo == 0) {
-		err = -EBPFLOOKUPFAIL;
-		goto out;
-	}
 
 	err = get_mmap_buff_indx(buff_num);
 	JUMP_TARGET(out);
@@ -1164,13 +1368,7 @@ __attribute__((always_inline)) static long calc_mmap_cnt(u32 buff_num,
 	map_cnt = (err - sizeof(struct probe_event_header)) /
 		  sizeof(struct proc_mmap);
 
-	err = bpf_probe_read(&new_p, sizeof(struct process_info), pinfo);
-	JUMP_TARGET(out);
-
-	new_p.mmap_cnt = map_cnt;
-
-	err = bpf_map_update_elem(&proc_info_map, &tgid_pid, &new_p, BPF_EXIST);
-
+	err = map_cnt;
 out:
 	return err;
 }
@@ -1212,59 +1410,6 @@ output_arr_to_streamer(void *ctx, void *buffer_map, u64 buff_size,
 	err = bpf_perf_event_output(ctx, &streamer, BPF_F_CURRENT_CPU,
 				    &(buffer->buff[indx]),
 				    bytes_written); // output
-
-out:
-	return err;
-}
-__attribute__((always_inline)) static long
-save_credentials(struct linux_binprm *lbprm, struct process_info *new_pinfo)
-{
-	uid_t uid, euid;
-	gid_t gid, egid;
-	struct cred *credentials;
-	long err;
-
-	err = bpf_core_read(&credentials, sizeof(struct cred *), &lbprm->cred);
-	JUMP_TARGET(out);
-
-	err = bpf_core_read(&uid, sizeof(uid_t), &credentials->uid);
-	JUMP_TARGET(out);
-
-	err = bpf_core_read(&gid, sizeof(gid_t), &credentials->gid);
-	JUMP_TARGET(out);
-
-	err = bpf_core_read(&euid, sizeof(uid_t), &credentials->euid);
-	JUMP_TARGET(out);
-
-	err = bpf_core_read(&egid, sizeof(gid_t), &credentials->egid);
-	JUMP_TARGET(out);
-
-	new_pinfo->credentials.uid = uid;
-	new_pinfo->credentials.gid = gid;
-	new_pinfo->credentials.euid = euid;
-	new_pinfo->credentials.egid = egid;
-out:
-	return err;
-}
-
-__attribute__((always_inline)) static long
-save_file_info(struct file *f, struct file_info *finfo)
-{
-	unsigned long i_ino;
-	unsigned long smg;
-	long err;
-
-	i_ino = 0;
-	smg = 0;
-
-	err = BPF_CORE_READ_INTO(&i_ino, f, f_inode, i_ino);
-	JUMP_TARGET(out);
-
-	err = BPF_CORE_READ_INTO(&smg, f, f_inode, i_sb, s_magic);
-	JUMP_TARGET(save);
-save:
-	finfo->i_ino = i_ino;
-	finfo->s_magic = smg;
 
 out:
 	return err;
@@ -1403,7 +1548,7 @@ generate_and_emit_tcp_info(struct pt_regs *ctx, int sys_nr)
 
 	// Since tcp_info_t is a union t.t4.eh and t.t6.eh
 	// are at the same address
-	initialize_event_header(&new_t.t4.eh, sys_nr, tgid_pid);
+	initialize_event_header(&new_t.t4.eh, tgid_pid, sys_nr);
 
 	err = bpf_core_read(&pinet6, sizeof(u64), &(inet_sk->pinet6));
 	JUMP_TARGET(error);
@@ -1592,8 +1737,8 @@ out:
 	return err;
 }
 
-__attribute__((always_inline)) static unsigned long
-get_standard_pipes_inodes(u64 tgid_pid)
+__attribute__((always_inline)) static void
+get_standard_pipes_inodes(struct process_info *pinfo)
 {
 	struct task_struct *curr;
 	struct files_struct *files;
@@ -1602,22 +1747,12 @@ get_standard_pipes_inodes(u64 tgid_pid)
 	struct file *std[3];
 	int err;
 	unsigned long private_data[3];
-	struct process_info *pinfo;
-	struct process_info new_pinfo;
 
 	curr = (struct task_struct *)bpf_get_current_task();
-
 	err = BPF_CORE_READ_INTO(&fdarr, curr, files, fdt, fd);
 	JUMP_TARGET(out);
 
 	err = bpf_core_read(&std, 3 * sizeof(struct files *), fdarr);
-	JUMP_TARGET(out);
-
-	pinfo = bpf_map_lookup_elem(&proc_info_map, &tgid_pid);
-	if (pinfo == 0)
-		goto out;
-
-	err = bpf_probe_read(&new_pinfo, sizeof(struct process_info), pinfo);
 	JUMP_TARGET(out);
 
 #pragma clang loop unroll(full)
@@ -1626,24 +1761,236 @@ get_standard_pipes_inodes(u64 tgid_pid)
 		if (err == SOCKET_FILE_OPS) {
 			err = test_if_file_socket(std[i], &private_data[i]);
 			if (!(err < 0)) {
-				new_pinfo.io[i].std_ino = get_inode_from_socket(
+				pinfo->io[i].std_ino = get_inode_from_socket(
 					(struct socket *)private_data[i]);
-				new_pinfo.io[i].type = STD_SOCK;
+				pinfo->io[i].type = STD_SOCK;
 			}
 		} else if (err == PIPE_FOPS) {
-			new_pinfo.io[i].std_ino = get_pipe_inode(std[i]);
-			new_pinfo.io[i].type = STD_PIPE;
+			pinfo->io[i].std_ino = get_pipe_inode(std[i]);
+			pinfo->io[i].type = STD_PIPE;
 		}
 	}
 
-	err = bpf_map_update_elem(&proc_info_map, &tgid_pid, &new_pinfo,
-				  BPF_EXIST);
 	JUMP_TARGET(out);
 
 out:
-	return 0;
+	return;
 }
 
+__attribute__((always_inline)) static void
+handle_fork_clone_exit(struct syscall_exit_fork_clone_ctx *ctx)
+{
+	int err;
+	struct file *f;
+	struct task_struct *tsk;
+	struct cred *credentials;
+	u64 tgid_pid, ppid, pathlen_offset;
+	event_t emeta;
+	struct process_info *pinfo;
+	struct process_info new_pinfo;
+
+	// Check if returning from newly created process
+	// or not. If not, then exit. We will handle syscall
+	// exiting in the newly create process's return path.
+	if (ctx->pid != 0)
+		goto out;
+
+	tgid_pid = bpf_get_current_pid_tgid();
+	bpf_printk("[%lu] 1) beginning event construction for syscall: %d\n",
+		   tgid_pid, ctx->syscall_nr);
+
+	// get ppid of current task. This is how we can get the process_info
+	// object we are working on.
+	tsk = (struct task_struct *)bpf_get_current_task();
+	if (tsk == 0) {
+		bpf_printk(
+			"handle_fork_clone_exit: [CRITICAL] Could not get task\n");
+		goto out;
+	}
+	// get the tgid_pid of the parent
+	ppid = get_ppid_of_task(tsk);
+	if (ppid == 0)
+		goto out;
+
+	bpf_printk("2) [%lu] ppid of new process: %lu: %d\n", tgid_pid, ppid,
+		   (ppid << 32) >> 32);
+
+	// get process_info object
+	pinfo = (struct process_info *)bpf_map_lookup_elem(&proc_info_map,
+							   &ppid);
+	if (pinfo == NULL)
+		goto out;
+	err = bpf_probe_read(&new_pinfo, sizeof(struct process_info), pinfo);
+	JUMP_TARGET(out);
+
+	// initialize event header. Set the tgid_pid of the new process
+	new_pinfo.eh.tgid_pid = tgid_pid;
+
+	// initialize event metadata to get a working buffer for strings.
+	// We use ppid to index, because that is also the index of the
+	// process_info object. In handle_syscall_exit, we need event_metadata
+	// and the saved object to have the same key, so we can delete them both.
+	err = initialize_event(&emeta, ppid, ctx->syscall_nr);
+	bpf_printk("[%lu] 3) initialize event: %d\n", tgid_pid, err);
+	JUMP_TARGET(out);
+
+	/* After this point, jump target of error should be handle_sys_exit.
+	 * So that we can reset the string buffer. and delete event info */
+
+	// intialize string buffer. The tgid_pid passed here is to set the event header
+	// of the strings buffer. Therefore, here it NEEDS to be the tgid_pid of the
+	// new process.
+	err = initialize_str_buffer(&new_pinfo.eh, ctx->syscall_nr,
+				    new_pinfo.eh.tgid_pid, emeta.wbuff);
+	bpf_printk("[%lu] 4) initialize string buffer: %d\n", tgid_pid, err);
+	JUMP_TARGET(handle_sys_exit);
+
+	// set interpreter to null
+	new_pinfo.interp_str_offset = LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE);
+
+	//	// set file path
+	//	f = get_underlying_file_of_task(tsk);
+	//	if (f != NULL) {
+	//		pathlen_offset = save_file_path(f, emeta);
+	//		new_pinfo.file.file_offset = pathlen_offset & 0xffffffff;
+	//		new_pinfo.file.path_len = pathlen_offset >> 32;
+	//
+	//		save_file_info(f, &new_pinfo.file);
+	//	}
+
+	// copy credentials
+	err = bpf_core_read(&credentials, sizeof(struct cred *), &tsk->cred);
+	if (err >= 0) {
+		save_credentials(credentials, &new_pinfo);
+	}
+
+	// save args, and environment
+	copy_args_env(&emeta, &new_pinfo);
+
+	// set stdio
+	get_standard_pipes_inodes(&new_pinfo);
+
+	bpf_printk("[[%lu] 5) emiting event for syscall: %d\n", tgid_pid,
+		   ctx->syscall_nr);
+	// emit process_info struct to userspace
+	err = bpf_perf_event_output(ctx, &streamer, BPF_F_CURRENT_CPU,
+				    &new_pinfo, sizeof(struct process_info));
+	JUMP_TARGET(handle_sys_exit);
+
+	// emit string data to userspace
+	err = output_arr_to_streamer(ctx, &str_buffs_map, PER_CPU_STR_BUFFSIZE,
+				     &emeta);
+
+handle_sys_exit:
+	handle_syscall_exit(&proc_info_map, &emeta, ppid);
+out:
+	return;
+}
+
+//__attribute__((always_inline)) static void
+//handle_fork_clone_exit(struct syscall_exit_fork_clone_ctx *ctx)
+//{
+//	int err;
+//	struct process_info *pinfo;
+//	struct file *f;
+//	struct process_info new_pinfo;
+//	struct task_struct *tsk;
+//	struct cred *credentials;
+//	event_t *emeta;
+//	u64 tgid_pid, ppid, pathlen_offset;
+//
+//	tgid_pid = bpf_get_current_pid_tgid();
+//
+//	// Incase the syscall failed, there is only one return
+//	// path, and that is by the calling process. So we must
+//	// handle syscall exit stuff now.
+//	if (ctx->pid < 0) {
+//		ppid = tgid_pid;
+//		goto handle_sys_exit;
+//	}
+//
+//	// Check if returning from newly created process
+//	// or not. If not, then exit. We will handle syscall
+//	// exiting in the newly create process's return path.
+//	if (ctx->pid != 0)
+//		goto out;
+//
+//	bpf_printk("1) In new process exit path from syscall %d: %d\n",
+//		   ctx->syscall_nr, tgid_pid);
+//	// For fork (and clone, etc.) we save process_info by ppid
+//	// since during syscall entry we donot have the new processe's
+//	// tgid_pid. Therefore, now we must get ppid again to retrieve
+//	// the information from maps
+//	//
+//	// Incase of error we cannot complete handle_syscall_exit. So
+//	// we just return.
+//	tsk = (struct task_struct *)bpf_get_current_task();
+//	if (tsk == 0)
+//		goto out;
+//	ppid = get_ppid_of_task(tsk);
+//	if (ppid == 0)
+//		goto out;
+//
+//	bpf_printk("2) [%d] ppid of new process: %lu: %d\n", tgid_pid, ppid,
+//		   (ppid << 32) >> 32);
+//
+//	// get event metadata using ppid
+//	emeta = bpf_map_lookup_elem(&event_metadata_map, &ppid);
+//	if (emeta == 0)
+//		goto handle_sys_exit;
+//
+//	bpf_printk("3) [%d] gotten emeta\n", ctx->pid);
+//
+//	// get process_info using ppid
+//	pinfo = bpf_map_lookup_elem(&proc_info_map, &ppid);
+//	if (pinfo == 0)
+//		goto handle_sys_exit;
+//
+//	bpf_printk("4) performing sanity check: %d ?== %d\n", pinfo->ppid,
+//		   ppid);
+//	// sanity check
+//	if (pinfo->ppid != ppid)
+//		goto handle_sys_exit;
+//
+//	err = bpf_probe_read(&new_pinfo, sizeof(struct process_info), pinfo);
+//	JUMP_TARGET(handle_sys_exit);
+//
+//	// set tgid_pid of new process
+//	new_pinfo.eh.tgid_pid = tgid_pid;
+//
+//	//	// set file path
+//	//	f = get_underlying_file_of_task(tsk);
+//	//	if (f != NULL) {
+//	//		pathlen_offset = save_file_path(f, emeta);
+//	//		new_pinfo.file.file_offset = pathlen_offset & 0xffffffff;
+//	//		new_pinfo.file.path_len = pathlen_offset >> 32;
+//	//
+//	//		save_file_info(f, &new_pinfo.file);
+//	//	}
+//
+//	// copy credentials
+//	err = bpf_core_read(&credentials, sizeof(struct cred), &tsk->cred);
+//	if (err >= 0) {
+//		save_credentials(credentials, &new_pinfo);
+//	}
+//
+//	// save args, and environment
+//	copy_args_env(emeta, &new_pinfo);
+//
+//	// set stdio
+//	get_standard_pipes_inodes(&new_pinfo);
+//
+//	bpf_printk("emiting event for syscall: %d\n", ctx->syscall_nr);
+//	// emit process_info struct to userspace
+//	err = bpf_perf_event_output(ctx, &streamer, BPF_F_CURRENT_CPU,
+//				    &new_pinfo, sizeof(struct process_info));
+//	bpf_printk("handle_fork_clone_exit: bpf_perf_event_output: %d\n", err);
+//
+//handle_sys_exit:
+//	handle_syscall_exit(&proc_info_map, NULL, ppid);
+//out:
+//	return;
+//}
 __attribute__((always_inline)) static int
 initialize_dump_bin(mmap_dump_buff_t *out, u64 event_time, u64 vm_base,
 		    u64 vm_len)
@@ -2050,13 +2397,9 @@ out:
 SEC("tracepoint/syscalls/sys_enter_execve")
 int tracepoint__syscalls__sys_enter_execve(struct syscall_execve_ctx *ctx)
 {
-	u32 buff_indx;
-	u32 str_size;
-	u64 nargs_nbytes;
 	u64 tgid_pid;
-	u64 ppid;
 	long err;
-	unsigned long *args_ptr;
+	struct task_struct *tsk;
 	event_t emeta = {};
 	struct process_info pinfo = {};
 
@@ -2065,39 +2408,21 @@ int tracepoint__syscalls__sys_enter_execve(struct syscall_execve_ctx *ctx)
 	err = initialize_event(&emeta, tgid_pid, SYS_EXECVE);
 	JUMP_TARGET(out);
 
-	DEBUG_PRINTK("[%ld] Execve event start\n----------\n", tgid_pid >> 32);
-
-	initialize_event_header(&pinfo.eh, ctx->syscall_nr, tgid_pid);
+	initialize_event_header(&pinfo.eh, tgid_pid, ctx->syscall_nr);
 
 	err = initialize_str_buffer(&pinfo.eh, ctx->syscall_nr, tgid_pid,
 				    emeta.wbuff);
-	if (err < 0) {
-		SINGULAR("[%ld] failed to initialize string buffer: %d\n",
-			 tgid_pid, err);
+	if (err < 0)
 		goto out;
-	}
 
 	err = initialize_mmap_buffer(&pinfo.eh, ctx->syscall_nr, tgid_pid,
 				     emeta.wbuff);
-	if (err < 0) {
-		SINGULAR("[%ld] failed to initialize mmap buffer: %d\n",
-			 tgid_pid, err);
+	if (err < 0)
 		goto out;
-	}
 
-	args_ptr = (unsigned long *)ctx->args_str_arr_ptr;
-	nargs_nbytes = save_str_arr_to_buff(emeta.wbuff, args_ptr);
-	pinfo.args.nargv = (u32)(nargs_nbytes >> 32);
-	pinfo.args.argv_offset =
-		get_str_buff_indx(emeta.wbuff) - (nargs_nbytes & 0xffffffff);
-
-	// if we could not get offset into string buffer, discard args
-	if (pinfo.args.argv_offset <= 0) {
-		pinfo.args.nargv = 0;
-		pinfo.args.argv_offset = LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE);
-	}
-
-	pinfo.ppid = get_ppid();
+	tsk = (struct task_struct *)bpf_get_current_task();
+	if (tsk != 0)
+		pinfo.ppid = get_ppid_of_task(tsk);
 
 	pinfo.interp_str_offset = LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE);
 
@@ -2106,8 +2431,6 @@ int tracepoint__syscalls__sys_enter_execve(struct syscall_execve_ctx *ctx)
 
 	err = bpf_map_update_elem(&proc_info_map, &(pinfo.eh.tgid_pid), &pinfo,
 				  BPF_NOEXIST);
-	DEBUG_PRINTK("[%ld] Execve process info saved: %ld\n", tgid_pid >> 32,
-		     err);
 out:
 	return 0;
 }
@@ -2157,6 +2480,7 @@ int kprobe__security_bprm_check(struct pt_regs *ctx)
 	struct file *f;
 	long err, pathlen_pathoffset;
 	struct process_info *pinfo;
+	struct cred *credentials;
 	struct process_info new_pinfo = { 0 };
 
 	lbprm = (struct linux_binprm *)PT_REGS_PARM1(ctx);
@@ -2190,9 +2514,9 @@ int kprobe__security_bprm_check(struct pt_regs *ctx)
 	if (new_pinfo.file.s_magic == TMPFS_MAGIC)
 		new_pinfo.dump = 1;
 
-	err = save_credentials(lbprm, &new_pinfo);
-	if (err < 0)
-		SINGULAR("save_credentials failed: %ld\n", err);
+	err = bpf_core_read(&credentials, sizeof(struct creds), &lbprm->cred);
+	JUMP_TARGET(out);
+	err = save_credentials(credentials, &new_pinfo);
 
 save_info:
 	bpf_map_update_elem(&proc_info_map, &tgid_pid, &new_pinfo, BPF_EXIST);
@@ -2227,7 +2551,6 @@ int kprobe__bprm_change_interp(struct pt_regs *ctx)
 
 	interp = (char *)PT_REGS_PARM1(ctx);
 	str_size = save_str(interp, emeta->wbuff);
-	DEBUG_PRINTK("[%ld] Process interpreter str saved\n", tgid_pid >> 32);
 	err = get_str_buff_indx(emeta->wbuff);
 	if (str_size == 0 || err < 0)
 		goto out;
@@ -2235,7 +2558,6 @@ int kprobe__bprm_change_interp(struct pt_regs *ctx)
 	new_pinfo.interp_str_offset = err - str_size;
 
 	bpf_map_update_elem(&proc_info_map, &tgid_pid, &new_pinfo, BPF_EXIST);
-	DEBUG_PRINTK("[%ld] Process interpreter saved\n", tgid_pid >> 32);
 out:
 	return 0;
 }
@@ -2253,13 +2575,13 @@ int tracepoint__sched__sched_process_exec(void *ctx)
 	long save, curr_indx, arr_indx, err;
 	int mmap_buff_size, i;
 	u32 map_num, indx;
-	//char zero_arr[MMAP_DUMP_BIN_SZ] = {0};
 	struct mmap_dump regions[MAX_MMAP_RECORDS] = { 0 };
 
 	tgid_pid = bpf_get_current_pid_tgid();
 
 	GET_EVENT_METADATA(emeta, "sched_process_exec");
 
+	/* check and record regions to dump */
 	save = is_tmpfs_execve(tgid_pid);
 	if (save != TMPFS_MAGIC)
 		goto out;
@@ -2310,52 +2632,7 @@ out:
 	return 0;
 }
 
-/* The following functions are renamed in different kernel version
- * Userspace loader checks which functions exists before attaching */
-
-/* TODO: Remove these hooks and replace with sched_process_exit 
- * TODO: Add kprobe on do_signal to detect if sched_process_exit called as a result of signal 
- */
-
-// < 5.10
-SEC("kprobe/do_signal")
-int kprobe__do_signal(struct pt_regs *ctx)
-{
-	call_dump_vm(ctx, &kprog_table);
-	return 0;
-}
-// 5.10
-SEC("kprobe/arch_do_signal")
-int kprobe__arch_do_signal(struct pt_regs *ctx)
-{
-	call_dump_vm(ctx, &kprog_table);
-	return 0;
-}
-
-// 5.11
-SEC("kprobe/arch_do_signal_or_restart")
-int kprobe__arch_do_signal_or_restart(struct pt_regs *ctx)
-{
-	call_dump_vm(ctx, &kprog_table);
-	return 0;
-}
-
-/* */
-
-SEC("tracepoint/syscalls/sys_enter_exit_group")
-int tracepoint__sys_enter_exit_group(void *ctx)
-{
-	call_dump_vm(ctx, &tprog_table);
-	return 0;
-}
-
-SEC("tracepoint/syscalls/sys_enter_exit")
-int tracepoint__sys_enter_exit(void *ctx)
-{
-	call_dump_vm(ctx, &tprog_table);
-	return 0;
-}
-
+// TODO: refactor. Unnecessary copying of process_info struct
 SEC("tracepoint/syscalls/sys_exit_execve")
 int tracepoint__syscalls__sys_exit_execve(struct syscall_exit *ctx)
 {
@@ -2364,11 +2641,8 @@ int tracepoint__syscalls__sys_exit_execve(struct syscall_exit *ctx)
 	u64 tgid_pid;
 	str_buff_t *str_buffer;
 	mmap_buff_t *mmap_buffer;
-	u32 buff_indx;
-	u32 mmap_cnt;
-	u32 mmap_buff_indx;
-	int bytes_written;
 	long err;
+	struct process_info new_pinfo = { 0 };
 
 	tgid_pid = bpf_get_current_pid_tgid();
 
@@ -2376,133 +2650,114 @@ int tracepoint__syscalls__sys_exit_execve(struct syscall_exit *ctx)
 
 	CHECK_SYSCALL_RET(ctx->ret);
 
-	get_standard_pipes_inodes(tgid_pid);
-
-	err = calc_mmap_cnt(emeta->wbuff, tgid_pid);
-	JUMP_TARGET(handle_exit);
-
-	/* output process information */
 	pinfo = bpf_map_lookup_elem(&proc_info_map, &tgid_pid);
-	if (pinfo == 0)
+	if (pinfo == NULL)
 		goto handle_exit;
 
-	err = bpf_perf_event_output(ctx, &streamer, BPF_F_CURRENT_CPU, pinfo,
-				    sizeof(proc_info_t));
-	DEBUG_PRINTK("[%ld] Err: %ld. Execve outputted primary data\n",
-		     tgid_pid >> 32, err);
+	err = bpf_probe_read(&new_pinfo, sizeof(struct process_info), pinfo);
+	if (err < 0)
+		goto handle_exit;
+
+	// save args and environment
+	copy_args_env(emeta, &new_pinfo);
+
+	// get files on stdin, stdout, stderr
+	get_standard_pipes_inodes(&new_pinfo);
+
+	// calculate numbers of proc_mmap struct being outputted
+	err = calc_mmap_cnt(emeta->wbuff);
 	JUMP_TARGET(handle_exit);
 
-	/* output string buffer */
-	err = output_arr_to_streamer(ctx, &str_buffs_map,
-				     (PER_CPU_STR_BUFFSIZE), emeta);
+	new_pinfo.mmap_cnt = err;
+
+	err = bpf_perf_event_output(ctx, &streamer, BPF_F_CURRENT_CPU,
+				    &new_pinfo, sizeof(struct process_info));
 	JUMP_TARGET(handle_exit);
 
-	DEBUG_PRINTK("[%ld] Execve outputted String_Data\n", tgid_pid >> 32);
+	// output string buffer
+	err = output_arr_to_streamer(ctx, &str_buffs_map, PER_CPU_STR_BUFFSIZE,
+				     emeta);
+	JUMP_TARGET(handle_exit);
 
-	/* output mmap buffer */
+	// output mmap buffer
 	err = output_arr_to_streamer(ctx, &mmap_buffs_map, (MMAP_BUFFSIZE),
 				     emeta);
 
-	DEBUG_PRINTK("[%ld] Execve outputted Mmap_Data. Err: %d\n",
-		     tgid_pid >> 32, err);
-
 handle_exit:
 	handle_syscall_exit(&proc_info_map, emeta, tgid_pid);
-	DEBUG_PRINTK("[%ld] Execve syscall exit handled\n", tgid_pid >> 32);
 out:
-	DEBUG_PRINTK("[%ld] Execve event concluded\n----------------\n",
-		     tgid_pid >> 32);
+	return 0;
+}
+
+SEC("tracepoint/sched/sched_process_exit")
+int tracepoint__sched__sched_process_exit(void *ctx)
+{
+	u64 tgid_pid;
+	int err;
+	struct exit_event ee = {};
+
+	tgid_pid = bpf_get_current_pid_tgid();
+
+	initialize_event_header(&ee.eh, tgid_pid, EXIT_EVENT);
+
+	err = bpf_perf_event_output(ctx, &streamer, BPF_F_CURRENT_CPU, &ee,
+				    sizeof(struct exit_event));
+	JUMP_TARGET(out);
+out:
 	return 0;
 }
 
 SEC("tracepoint/syscalls/sys_enter_vfork")
-int tracepoint__syscalls__sys_enter_vfork(
-	struct syscall_enter_fork_clone_ctx *ctx)
+int tracepoint__syscalls__sys_enter_vfork(struct syscall_enter_fork_ctx *ctx)
 {
-	handle_fork_enter(ctx);
-
+	handle_fork_clone_enter(ctx, 0);
 	return 0;
 }
 
 SEC("tracepoint/syscalls/sys_enter_fork")
-int tracepoint__syscalls__sys_enter_fork(
-	struct syscall_enter_fork_clone_ctx *ctx)
+int tracepoint__syscalls__sys_enter_fork(struct syscall_enter_fork_ctx *ctx)
 {
-	handle_fork_enter(ctx);
-
+	handle_fork_clone_enter(ctx, 0);
 	return 0;
 }
 
 SEC("tracepoint/syscalls/sys_enter_clone")
-int tracepoint__syscalls__sys_enter_clone(
-	struct syscall_enter_fork_clone_ctx *ctx)
+int tracepoint__syscalls__sys_enter_clone(struct syscall_enter_clone_ctx *ctx)
 {
-	proc_info_t info = {};
-	u64 tgid_pid;
-
-	tgid_pid = bpf_get_current_pid_tgid();
-	initialize_event_header(&(info.cpinfo.eh), ctx->syscall_nr, tgid_pid);
-
-	info.cpinfo.clone_flags = ctx->clone_flags;
-
-	bpf_map_update_elem(&proc_info_map, &tgid_pid, &info, BPF_NOEXIST);
-
+	handle_fork_clone_enter((struct syscall_enter_fork_ctx *)ctx,
+				ctx->clone_flags);
 	return 0;
 }
 
-#ifdef HANDLE_SYS_CLONE3
-SEC("tracepoint/syscalls/sys_enter_clone3")
-int tracepoint__syscalls__sys_enter_clone3(struct syscall_enter_clone3_args *ctx)
-{
-	return 0;
-}
+//#ifdef HANDLE_SYS_CLONE3
+//SEC("tracepoint/syscalls/sys_enter_clone3")
+//int tracepoint__syscalls__sys_enter_clone3(struct syscall_enter_clone3_args *ctx)
+//{
+//	return 0;
+//}
+//
+//SEC("tracepoint/syscalls/sys_exit_clone3")
+//int tracepoint__syscalls__sys_exit_clone3(void *ctx)
+//{
+//	return 0;
+//}
+//#endif
 
-SEC("tracepoint/syscalls/sys_exit_clone3")
-int tracepoint__syscalls__sys_exit_clone3(void *ctx)
-{
-	return 0;
-}
-#endif
-
-SEC("tracepoint/sched/sched_process_fork")
-int tracepoint__sched__sched_process_fork(struct sched_process_fork *ctx)
-{
-	long err;
-	struct child_proc_info *cpinfo;
-	struct child_proc_info new_cpinfo;
-	u64 calling_tgidpid;
-
-	calling_tgidpid = bpf_get_current_pid_tgid();
-	cpinfo = bpf_map_lookup_elem(&proc_info_map, &calling_tgidpid);
-	if (cpinfo == 0)
-		goto out;
-
-	err = bpf_probe_read(&new_cpinfo, sizeof(struct child_proc_info),
-			     cpinfo);
-	JUMP_TARGET(out);
-
-	if (cpinfo->clone_flags & CLONE_PARENT_SETTID) {
-		new_cpinfo.tgid_pid = ctx->parent;
-		new_cpinfo.tgid_pid = (new_cpinfo.tgid_pid << 32) | ctx->child;
-	} else {
-		new_cpinfo.tgid_pid = ctx->child;
-		new_cpinfo.tgid_pid = (new_cpinfo.tgid_pid << 32) | ctx->child;
-	}
-
-	new_cpinfo.ppid = calling_tgidpid;
-	err = bpf_perf_event_output(ctx, &streamer, BPF_F_CURRENT_CPU,
-				    &new_cpinfo,
-				    sizeof(struct child_proc_info));
-out:
-	return 0;
-}
+//SEC("tracepoint/sched/sched_process_fork")
+//int tracepoint__sched__sched_process_fork(struct sched_process_fork *ctx)
+//{
+//	u64 calling_tgidpid;
+//
+//	calling_tgidpid = bpf_get_current_pid_tgid();
+//	bpf_printk("fork started by proc: %lu\n", calling_tgidpid);
+//}
 
 SEC("tracepoint/syscalls/sys_exit_vfork")
 int tracepoint__syscalls__sys_exit_vfork(struct syscall_exit_fork_clone_ctx *ctx)
 {
 	CHECK_SYSCALL_RET(ctx->pid);
 handle_exit:
-	handle_fork_exit(ctx);
+	handle_fork_clone_exit(ctx);
 	return 0;
 }
 
@@ -2511,7 +2766,7 @@ int tracepoint__syscalls__sys_exit_clone(struct syscall_exit_fork_clone_ctx *ctx
 {
 	CHECK_SYSCALL_RET(ctx->pid);
 handle_exit:
-	handle_fork_exit(ctx);
+	handle_fork_clone_exit(ctx);
 	return 0;
 }
 
@@ -2520,7 +2775,7 @@ int tracepoint__syscalls__sys_exit_fork(struct syscall_exit_fork_clone_ctx *ctx)
 {
 	CHECK_SYSCALL_RET(ctx->pid);
 handle_exit:
-	handle_fork_exit(ctx);
+	handle_fork_clone_exit(ctx);
 	return 0;
 }
 
@@ -2601,7 +2856,7 @@ int kprobe__security_socket_create(struct pt_regs *ctx)
 	tgid_pid = bpf_get_current_pid_tgid();
 	GET_EVENT_METADATA(emeta, "security_socket_create");
 
-	initialize_event_header(&sock_info.sinfo.eh, SYS_SOCKET, tgid_pid);
+	initialize_event_header(&sock_info.sinfo.eh, tgid_pid, SYS_SOCKET);
 
 	sock_info.sinfo.family = family;
 	sock_info.sinfo.type = PT_REGS_PARM2(ctx);
@@ -2858,7 +3113,7 @@ int kprobe__commit_creds(void *ctx)
 
 	// check if root creds are being commited. Get from rdi.
 
-	initialize_event_header(&cfg.eh, LPE_COMMIT_CREDS, tgid_pid);
+	initialize_event_header(&cfg.eh, tgid_pid, LPE_COMMIT_CREDS);
 
 	// Get 32 stack addresses.
 	err = bpf_get_stack(ctx, stack, 2 * sizeof(u64), 0);
@@ -2892,7 +3147,7 @@ int tracepoint__syscalls__sys_enter_ptrace(struct syscall_enter_ptrace *ctx)
 		err = initialize_event(&emeta, tgid_pid, SYS_PTRACE);
 		JUMP_TARGET(out);
 
-		initialize_event_header(&ptrace_info.eh, SYS_PTRACE, tgid_pid);
+		initialize_event_header(&ptrace_info.eh, tgid_pid, SYS_PTRACE);
 		ptrace_info.request = ctx->request;
 		ptrace_info.addr = ctx->addr;
 		if (ctx->request == PTRACE_TRACEME)
@@ -3001,7 +3256,7 @@ int tracepoint__syscalls__sys_enter_finit_module(void *ctx)
 	err = initialize_event(&emeta, tgid_pid, SYS_FINIT_MODULE);
 	JUMP_TARGET(out);
 
-	initialize_event_header(&kinfo.kinfo.eh, SYS_FINIT_MODULE, tgid_pid);
+	initialize_event_header(&kinfo.kinfo.eh, tgid_pid, SYS_FINIT_MODULE);
 	err = bpf_map_update_elem(&proc_activity_map, &tgid_pid, &kinfo,
 				  BPF_NOEXIST);
 	JUMP_TARGET(out);

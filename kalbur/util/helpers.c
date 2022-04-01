@@ -16,42 +16,50 @@ static size_t calc_path_sz(char **parts, uint32_t pathlen)
 	return sz + (pathlen * 2);
 }
 
-char *build_cmdline(char *args_data, uint32_t argv_off, uint32_t nargv)
+char *build_cmdline(char *args_data, uint32_t argv_off, unsigned long nbytes)
 {
-	uint32_t cnt, indx;
-	size_t arg_sz;
 	char *args = NULL;
-	char *dest = NULL;
 	char *str = NULL;
 
-	for (indx = argv_off, cnt = 0; cnt < nargv; indx++) {
-		if (indx >= PER_CPU_STR_BUFFSIZE) {
-			ASSERT(indx < PER_CPU_STR_BUFFSIZE,
-			       "build_args_str: indx >= PER_CPU_STR_BUFFSIZE");
-			return NULL;
-		}
-		if (args_data[indx] == 0)
-			cnt++;
-	}
+	ASSERT(argv_off != LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE),
+	       "build_env: env_off == LAST_NULL_BYTE");
 
-	arg_sz = indx - argv_off;
-	args = calloc(arg_sz, sizeof(char));
-	if (args != NULL) {
-		dest = args;
-		str = &(args_data[argv_off]);
-		for (uint32_t i = 0; i < nargv; ++i) {
-			args = strcat(args, str);
-			dest = strchr(args, '\0');
-			*dest = ',';
-			str = strchr(str, '\0');
-			str++;
-		}
-
-		return args;
-	} else {
+	args = calloc(nbytes, sizeof(char));
+	if (args == NULL)
 		return NULL;
+
+	str = &(args_data[argv_off]);
+	memcpy(args, str, nbytes);
+	for (unsigned int i = 0; i < nbytes; ++i) {
+		if (args[i] == 0)
+			args[i] = ',';
 	}
+
+	return args;
 }
+
+char *build_env(char *env_data, uint32_t env_off, unsigned long nbytes)
+{
+	char *env = NULL;
+	char *str = NULL;
+
+	ASSERT(env_off != LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE),
+	       "build_env: env_off == LAST_NULL_BYTE");
+
+	env = calloc(nbytes, sizeof(char));
+	if (env == NULL)
+		return NULL;
+
+	str = &(env_data[env_off]);
+	memcpy(env, str, nbytes);
+
+	for (unsigned int i = 0; i < nbytes; ++i) {
+		if (env[i] == 0)
+			env[i] = ',';
+	}
+	return env;
+}
+
 char *build_filename_from_event(char *file_path, uint32_t pathlen)
 {
 	char **parts;

@@ -38,6 +38,9 @@
 #define MODPROBE_OVERWRITE -3
 #define EXIT_EVENT -4
 
+#define IS_PROCESS_LAUNCH(syscall)                                             \
+	((syscall == SYS_EXECVE) || IS_FORK_OR_FRIENDS(syscall))
+
 #define IS_EXIT_EVENT(syscall) (syscall == EXIT_EVENT)
 
 #define IS_SOCKET_EVENT(syscall)                                               \

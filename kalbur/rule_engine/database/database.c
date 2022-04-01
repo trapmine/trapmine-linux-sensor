@@ -495,7 +495,7 @@ int insert_proc_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 		sqlite3_bind_null(ppStmt, sqlite3_bind_parameter_index(
 						  ppStmt, PARAM_HOLDER(ARGS)));
 	} else {
-		args = build_cmdline(string_data, argv_off, pinfo->args.nargv);
+		args = build_cmdline(string_data, argv_off, pinfo->args.nbytes);
 		if (args != NULL)
 			SQLITE3_BIND_STR("insert_proc_info", text, ARGS, args);
 		else
@@ -678,40 +678,40 @@ int insert_tcp_conn_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 	return err;
 }
 
-int insert_fork_and_friends_event(sqlite3 *db, hashtable_t *ht,
-				  struct message_state *ms, int event_id)
-{
-	sqlite3_stmt *ppStmt;
-	struct child_proc_info *cpi;
-	int err;
-
-	ppStmt = (sqlite3_stmt *)hash_get(ht, INSERT_FORK_AND_FRIENDS_INFO,
-					  sizeof(INSERT_FORK_AND_FRIENDS_INFO));
-	if (ppStmt == NULL) {
-		fprintf(stderr,
-			"insert_fork_and_friends_event: Failed to acquire prepared statement from hashmap.\n");
-		return CODE_FAILED;
-	}
-
-	cpi = (struct child_proc_info *)ms->primary_data;
-
-	SQLITE3_BIND_INT("insert_fork_and_friends_event", int, EVENT_ID,
-			 event_id);
-	SQLITE3_BIND_INT("insert_fork_and_friends_event", int64, NEW_TGID_PID,
-			 cpi->tgid_pid);
-	SQLITE3_BIND_INT("insert_fork_and_friends_event", int64, PPID,
-			 cpi->ppid);
-	SQLITE3_BIND_INT("insert_fork_and_friends_event", int64, CLONE_FLAGS,
-			 cpi->clone_flags);
-
-	err = sqlite3_step(ppStmt);
-	err = err == SQLITE_DONE ? CODE_SUCCESS : CODE_RETRY;
-
-	sqlite3_clear_bindings(ppStmt);
-	sqlite3_reset(ppStmt);
-
-	return err;
-}
+//int insert_fork_and_friends_event(sqlite3 *db, hashtable_t *ht,
+//				  struct message_state *ms, int event_id)
+//{
+//	sqlite3_stmt *ppStmt;
+//	struct child_proc_info *cpi;
+//	int err;
+//
+//	ppStmt = (sqlite3_stmt *)hash_get(ht, INSERT_FORK_AND_FRIENDS_INFO,
+//					  sizeof(INSERT_FORK_AND_FRIENDS_INFO));
+//	if (ppStmt == NULL) {
+//		fprintf(stderr,
+//			"insert_fork_and_friends_event: Failed to acquire prepared statement from hashmap.\n");
+//		return CODE_FAILED;
+//	}
+//
+//	cpi = (struct child_proc_info *)ms->primary_data;
+//
+//	SQLITE3_BIND_INT("insert_fork_and_friends_event", int, EVENT_ID,
+//			 event_id);
+//	SQLITE3_BIND_INT("insert_fork_and_friends_event", int64, NEW_TGID_PID,
+//			 cpi->tgid_pid);
+//	SQLITE3_BIND_INT("insert_fork_and_friends_event", int64, PPID,
+//			 cpi->ppid);
+//	SQLITE3_BIND_INT("insert_fork_and_friends_event", int64, CLONE_FLAGS,
+//			 cpi->clone_flags);
+//
+//	err = sqlite3_step(ppStmt);
+//	err = err == SQLITE_DONE ? CODE_SUCCESS : CODE_RETRY;
+//
+//	sqlite3_clear_bindings(ppStmt);
+//	sqlite3_reset(ppStmt);
+//
+//	return err;
+//}
 
 int insert_lpe_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 		    int event_id)

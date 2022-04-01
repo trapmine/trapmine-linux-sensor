@@ -70,7 +70,7 @@ struct mmap_dump_fmt {
 		else if (syscall == SYS_SOCKET)                                \
 			copy = sizeof(struct socket_create);                   \
 		else if (IS_FORK_OR_FRIENDS(syscall))                          \
-			copy = sizeof(struct child_proc_info);                 \
+			copy = sizeof(struct process_info);                    \
 		else if (syscall == LPE_COMMIT_CREDS)                          \
 			copy = sizeof(struct cfg_integrity);                   \
 		else if (syscall == SYS_PTRACE)                                \

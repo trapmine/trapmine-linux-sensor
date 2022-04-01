@@ -29,7 +29,7 @@ static bool should_save_db(struct message_state *ms)
 {
 	if (!(IS_MS_DB_SAVED(ms))) {
 		ASSERT(IS_MS_COMPLETE(ms) != 0,
-		       "should_manage_ctx: ms->progress != completed");
+		       "should_save_db: ms->progress != completed");
 		ASSERT(IS_MS_GC(ms) == 0, "should_save_db: ms->progress == gc");
 
 		return true;

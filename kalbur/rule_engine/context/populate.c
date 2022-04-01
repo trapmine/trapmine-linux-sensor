@@ -32,7 +32,7 @@ static int populate_execve_event(struct process_context *ctx,
 
 	pinfo = (struct process_info *)ms->primary_data;
 	ASSERT(pinfo != NULL, "populate_execve_event: pinfo == NULL");
-	ASSERT(pinfo->eh.syscall_nr == SYS_EXECVE,
+	ASSERT(IS_PROCESS_LAUNCH(pinfo->eh.syscall_nr),
 	       "populate_execve_event: syscall_nr != SYS_EXECVE");
 
 	ctx->tgid_pid = pinfo->eh.tgid_pid;
@@ -52,9 +52,12 @@ static int populate_execve_event(struct process_context *ctx,
 			       (MESSAGE_STRING_SZ(ms) >
 				pinfo->file.file_offset),
 		       "create_process_context: string_data.size <= file_offset");
-		ctx->file_path = build_filename_from_event(
-			PTR_TO_STRING_DATA(ms, pinfo->file.file_offset),
-			pinfo->file.path_len);
+		if (pinfo->file.file_offset !=
+		    LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE)) {
+			ctx->file_path = build_filename_from_event(
+				PTR_TO_STRING_DATA(ms, pinfo->file.file_offset),
+				pinfo->file.path_len);
+		}
 
 		// save cmdline
 		ASSERT((pinfo->args.argv_offset ==
@@ -62,9 +65,30 @@ static int populate_execve_event(struct process_context *ctx,
 			       (MESSAGE_STRING_SZ(ms) >
 				pinfo->args.argv_offset),
 		       "create_process_context: string_data.size <= argv_offset");
-		ctx->cmdline = build_cmdline(MESSAGE_STRING(ms),
-					     pinfo->args.argv_offset,
-					     pinfo->args.nargv);
+		ASSERT((pinfo->args.nbytes + pinfo->args.argv_offset) <=
+			       MESSAGE_STRING_SZ(ms),
+		       "create_process_context: args.nbytes + args.argv_offset >= MESSAGE_STRING_SZ(ms)");
+		if (pinfo->args.argv_offset !=
+		    LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE)) {
+			ctx->cmdline = build_cmdline(MESSAGE_STRING(ms),
+						     pinfo->args.argv_offset,
+						     pinfo->args.nbytes);
+		}
+
+		// save environment
+		ASSERT((pinfo->env.env_offset ==
+			LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE)) ||
+			       (MESSAGE_STRING_SZ(ms) > pinfo->env.env_offset),
+		       "create_process_context: string_data.size <= argv_offset");
+		ASSERT((pinfo->env.nbytes + pinfo->env.env_offset) <=
+			       MESSAGE_STRING_SZ(ms),
+		       "create_process_context: env.nbytes + env.env_offset >= MESSAGE_STRING_SZ(ms)");
+		if (pinfo->env.env_offset !=
+		    LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE)) {
+			ctx->environment = build_env(MESSAGE_STRING(ms),
+						     pinfo->env.env_offset,
+						     pinfo->env.nbytes);
+		}
 
 		// save interpreter string, if present
 		ASSERT((pinfo->interp_str_offset ==
@@ -244,7 +268,7 @@ static int populate_context(struct process_context *ctx,
 {
 	if (IS_SOCKET_EVENT(event_type)) {
 		return populate_socket_event(ctx, ms);
-	} else if (event_type == SYS_EXECVE) {
+	} else if (IS_PROCESS_LAUNCH(event_type)) {
 		return populate_execve_event(ctx, ms);
 	} else {
 		return CODE_SUCCESS;

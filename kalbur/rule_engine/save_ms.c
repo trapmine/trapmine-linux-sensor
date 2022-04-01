@@ -161,36 +161,37 @@ out:
 
 MESSAGE_HANDLER_FUNC(save_fork_and_friends_event)
 {
-	int event_id, err, rollback_err;
-
-	err = begin_transaction(db, ht);
-	if (err != CODE_SUCCESS)
-		goto out;
-
-	event_id = insert_event(db, ht,
-				(struct probe_event_header *)ms->primary_data);
-	HANDLE_FAIL_JUMP(event_id);
-
-	err = insert_fork_and_friends_event(db, ht, ms, event_id);
-	HANDLE_FAIL_JUMP(err);
-
-	err = commit_transaction(db, ht);
-	if (err == CODE_FAILED)
-		fprintf(stderr,
-			"save_fork_and_friends_event: failed to commit transaction: %s\n",
-			sqlite3_errmsg(db));
-
-	HANDLE_FAIL_JUMP(err);
-
-	return err;
-
-rollback:
-	err = CODE_RETRY;
-	rollback_err = rollback_transaction(db, ht);
-	ASSERT(rollback_err == CODE_SUCCESS,
-	       "save_tcp_connection_event: err (rollback_transaction) != CODE_SUCCESS");
-out:
-	return err;
+	return CODE_SUCCESS;
+	//	int event_id, err, rollback_err;
+	//
+	//	err = begin_transaction(db, ht);
+	//	if (err != CODE_SUCCESS)
+	//		goto out;
+	//
+	//	event_id = insert_event(db, ht,
+	//				(struct probe_event_header *)ms->primary_data);
+	//	HANDLE_FAIL_JUMP(event_id);
+	//
+	//	err = insert_fork_and_friends_event(db, ht, ms, event_id);
+	//	HANDLE_FAIL_JUMP(err);
+	//
+	//	err = commit_transaction(db, ht);
+	//	if (err == CODE_FAILED)
+	//		fprintf(stderr,
+	//			"save_fork_and_friends_event: failed to commit transaction: %s\n",
+	//			sqlite3_errmsg(db));
+	//
+	//	HANDLE_FAIL_JUMP(err);
+	//
+	//	return err;
+	//
+	//rollback:
+	//	err = CODE_RETRY;
+	//	rollback_err = rollback_transaction(db, ht);
+	//	ASSERT(rollback_err == CODE_SUCCESS,
+	//	       "save_tcp_connection_event: err (rollback_transaction) != CODE_SUCCESS");
+	//out:
+	//	return err;
 }
 
 MESSAGE_HANDLER_FUNC(save_mprotect_event)

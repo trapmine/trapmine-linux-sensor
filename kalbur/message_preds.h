@@ -39,7 +39,7 @@ COMPLETE_PRED(is_mmap_complete)
 
 COMPLETE_PRED(is_fork_and_friends_complete)
 {
-	if (ms->primary_data != NULL)
+	if ((ms->primary_data != NULL) && (MESSAGE_STRING(ms) != NULL))
 		return CODE_SUCCESS;
 
 	return CODE_FAILED;

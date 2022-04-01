@@ -41,6 +41,7 @@ struct process_context {
 	char comm[TASK_COMM_LEN];
 	struct creds credentials;
 	char *cmdline;
+	char *environment;
 	char *interpreter;
 	char *file_path;
 	uint64_t parent_pid;
