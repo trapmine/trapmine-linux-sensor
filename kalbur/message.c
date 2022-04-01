@@ -316,7 +316,6 @@ static struct message_state *free_message(struct message_state *ms)
 
 	// misc
 	ms->pred = NULL;
-	ms->next_gc = NULL;
 
 	free(ms);
 
