@@ -11,6 +11,7 @@
 #include <helpers.h>
 #include <stdlib.h>
 #include <events.h>
+#include <stdio.h>
 
 static int get_event_type(struct message_state *ms)
 {
@@ -35,15 +36,14 @@ static int populate_execve_event(struct process_context *ctx,
 	ASSERT(IS_PROCESS_LAUNCH(pinfo->eh.syscall_nr),
 	       "populate_execve_event: syscall_nr != SYS_EXECVE");
 
-	ctx->tgid_pid = pinfo->eh.tgid_pid;
 	__builtin_memcpy(&ctx->credentials, &pinfo->credentials,
 			 sizeof(struct creds));
 	__builtin_memcpy(ctx->io, pinfo->io, sizeof(struct stdio) * 3);
 
 	// save parent info
 	ctx->parent_pid = pinfo->ppid;
-	__builtin_memcpy(ctx->parent_comm, pinfo->eh.comm,
-			 TYPED_MACRO(TASK_COMM_LEN, UL));
+	//	__builtin_memcpy(ctx->parent_comm, pinfo->eh.parent_comm,
+	//			 TYPED_MACRO(TASK_COMM_LEN, UL));
 
 	if (MESSAGE_STRING(ms) != NULL) {
 		// save filename
@@ -119,130 +119,279 @@ static int populate_execve_event(struct process_context *ctx,
 	return CODE_SUCCESS;
 }
 
-static struct connections *find_connection_by_inode(struct connections *c,
+static struct connections *find_connection_by_inode(struct fd *working_fd,
 						    uint64_t i_ino)
 {
-	if (c == NULL)
-		return NULL;
-
-	while (c != NULL) {
-		if (c->sock->i_ino == i_ino) {
-			return c;
-		}
-
-		c = c->next;
-	}
-
-	ASSERT(c == NULL, "find_connection_by_inode: c != NULL");
-	return c;
-}
-
-static int insert_socket_creation(struct process_context *ctx,
-				  struct message_state *ms)
-{
-	struct connections *c, *last;
-	struct socket_create *sock;
+	struct file *f;
 	int err;
 
-	sock = (struct socket_create *)ms->primary_data;
+	err = pthread_rwlock_rdlock(&working_fd->fdlock);
+	ASSERT(err == 0,
+	       "find_connection_by_inode: failed to acquire read lock on fdlock");
 
-	c = NULL;
-	if (ctx->open_sockets == NULL) {
-		// Create connection object.
-		ctx->open_sockets = (struct connections *)calloc(
-			1UL, sizeof(struct connections));
-		if (ctx->open_sockets == NULL) {
-			c = ctx->open_sockets;
-			err = CODE_FAILED;
-			goto error;
+	f = working_fd->fls;
+	while (f != NULL) {
+		if (f->i_ino == i_ino) {
+			if (f->type == F_SOCK)
+				return (struct connections *)f->obj;
 		}
-
-		// Create socket_create object
-		ctx->open_sockets->sock = (struct socket_create *)calloc(
-			1UL, sizeof(struct socket_create));
-		if (ctx->open_sockets->sock == NULL) {
-			c = ctx->open_sockets;
-			err = CODE_FAILED;
-			goto error;
-		}
-
-		// copy socket_create object
-		__builtin_memcpy(ctx->open_sockets->sock, sock,
-				 sizeof(struct socket_create));
-
-		return CODE_SUCCESS;
+		f = f->next;
 	}
 
-#ifdef __DEBUG__
-	// Ensure that a socket with the same inode number is not present
-	// in the list. Just some invariant validation.
-	ASSERT(ctx->open_sockets != NULL,
-	       "insert_socket_creation: ctx->open_sockets == NULL");
-	c = find_connection_by_inode(ctx->open_sockets, sock->i_ino);
-	ASSERT(c == NULL,
-	       "insert_socket_creation: c != NULL (socket already present)");
-#endif
+	err = pthread_rwlock_unlock(&working_fd->fdlock);
+	ASSERT(err == 0,
+	       "find_connection_by_inode: failed to realse read lock");
 
-	// create new connection object.
-	c = (struct connections *)calloc(1UL, sizeof(struct connections));
-	if (c == NULL) {
-		err = CODE_FAILED;
-		goto error;
-	}
-
-	// create new socket_create object.
-	c->sock = (struct socket_create *)calloc(1UL,
-						 sizeof(struct socket_create));
-	if (c->sock == NULL) {
-		err = CODE_FAILED;
-		goto error;
-	}
-	__builtin_memcpy(c->sock, sock, sizeof(struct socket_create));
-
-	// add new connection to list
-	last = ctx->open_sockets;
-	ASSERT(last != NULL, "insert_socket_creation: last == NULL");
-	while (last->next != NULL) {
-		last = last->next;
-	}
-
-	last->next = c;
-
-	return CODE_SUCCESS;
-
-error:
-	if (c != NULL) {
-		if (c->sock != NULL) {
-			free(c->sock);
-		}
-		free(c);
-	}
-
-	return err;
+	return NULL;
 }
 
 static int insert_socket_event(struct process_context *ctx,
 			       struct message_state *ms)
 {
+	int err, lock_err;
+	int fd;
+	struct open_files *ofs;
 	struct connections *c;
+	struct fd *working_fd;
 	tcp_info_t *tcp_info;
 
+	ofs = ctx->files;
+	ASSERT(ofs != NULL, "insert_socket_event: ofs == NULL");
+
 	tcp_info = (tcp_info_t *)ms->primary_data;
+	ASSERT(tcp_info != NULL, "insert_socket_event: tcp_info == NULL");
 
-	// if we could not find the associated connection object, then this
-	// event was possibly received out of order. So we will retry it later
-	c = find_connection_by_inode(ctx->open_sockets, tcp_info->t4.i_ino);
-	if (c == NULL)
-		return CODE_RETRY;
+	// acquire read lock of fls_lock
+	err = pthread_rwlock_rdlock(&ofs->fls_lock);
+	ASSERT(err == 0,
+	       "insert_socket_event: failed to acquire read lock on fls_lock");
 
-	ASSERT(c->tcp_info == NULL, "insert_socket_event: c->tcp_info != NULL");
-	c->tcp_info = (struct tcp_info_t *)calloc(1UL, sizeof(tcp_info_t));
-	if (c->tcp_info == NULL)
-		return CODE_FAILED;
+	fd = tcp_info->t4.sockfd;
+
+	// if fd is larger then ofs->fls_sz, then creation
+	// event has not been received yet.
+	if (fd > ofs->fls_sz) {
+		err = CODE_RETRY;
+		goto unlock;
+	}
+
+	working_fd = ofs->fdls[fd];
+	if (working_fd == NULL) {
+		err = CODE_RETRY;
+		goto unlock;
+	}
+
+	c = find_connection_by_inode(working_fd, tcp_info->t4.i_ino);
+	if (c == NULL) {
+		err = CODE_RETRY;
+		goto unlock;
+	}
+
+	c->tcp_info = (tcp_info_t *)calloc(1UL, sizeof(tcp_info_t));
+	if (c->tcp_info == NULL) {
+		err = CODE_FAILED;
+		goto unlock;
+	}
 
 	__builtin_memcpy(c->tcp_info, tcp_info, sizeof(tcp_info_t));
 
+	err = CODE_SUCCESS;
+
+unlock:
+	lock_err = pthread_rwlock_unlock(&ofs->fls_lock);
+	ASSERT(lock_err == 0,
+	       "insert_socket_event: failed to release read lock");
+	return err;
+}
+
+static int realloc_fdls(struct open_files *ofs, int fd)
+{
+	int err, lock_err;
+	unsigned long old_sz;
+	unsigned long new_sz;
+	struct fd **tmp;
+
+	// take write lock on fls since we want to modify it
+	err = pthread_rwlock_wrlock(&ofs->fls_lock);
+	ASSERT(err == 0, "realloc_fdls: could not acquire write lock");
+
+	tmp = ofs->fdls;
+	old_sz = (unsigned long)ofs->fls_sz;
+
+	new_sz = (unsigned int)fd * 2;
+	ofs->fdls = (struct fd **)calloc(new_sz, sizeof(struct fd *));
+	if (ofs->fdls == NULL) {
+		err = CODE_FAILED;
+		goto unlock;
+	}
+	ofs->fls_sz = (int)new_sz;
+
+	memcpy(ofs->fdls, tmp, old_sz * sizeof(struct fd *));
+	memset(tmp, 0, old_sz * sizeof(struct fd *));
+
+	free(tmp);
+	tmp = NULL;
+
+	err = CODE_SUCCESS;
+
+unlock:
+	lock_err = pthread_rwlock_unlock(&ofs->fls_lock);
+	ASSERT(lock_err == 0, "realloc_fdls: failed to release write lock");
+
+	return err;
+}
+
+// This function adds a new file to the linked list of all files with
+// the same fd. It acquires a write lock on it before inserting the file.
+static int add_file_to_fdls(struct file **f, struct fd *working_fd)
+{
+	struct file *last_f;
+	int err;
+
+	// acquire write lock on fd
+	err = pthread_rwlock_wrlock(&working_fd->fdlock);
+	ASSERT(err == 0,
+	       "add_file_to_fdls: failed to acquire write lock on fdlock");
+
+	last_f = working_fd->fls;
+
+	if (last_f != NULL) {
+		while (last_f->next != NULL)
+			last_f = last_f->next;
+	} else {
+		last_f = *f;
+	}
+
+	last_f->next = *f;
+
+	err = pthread_rwlock_unlock(&working_fd->fdlock);
+	ASSERT(err == 0,
+	       "add_file_to_fdls: failed to realease write lock on fdlock");
+
 	return CODE_SUCCESS;
+}
+
+static int initialize_fd(struct fd **working_fd)
+{
+	ASSERT(*working_fd == NULL, "initialize_fd: *working_fd != NULL");
+	struct fd *f;
+	int err;
+
+	*working_fd = (struct fd *)calloc(1UL, sizeof(struct fd));
+	if (*working_fd == NULL) {
+		return CODE_FAILED;
+	}
+
+	f = *working_fd;
+	err = pthread_rwlock_init(&(f->fdlock), NULL);
+	if (err != 0) {
+		fprintf(stderr, "initialize_fd: could not initialized fd: %d\n",
+			err);
+
+		free(*working_fd);
+		*working_fd = NULL;
+		return CODE_FAILED;
+	}
+	f->fls = NULL;
+
+	return CODE_SUCCESS;
+}
+
+static int insert_new_file(struct process_context *ctx, struct file **f, int fd)
+{
+	struct fd *working_fd;
+	struct open_files *ofs = ctx->files;
+	int err, lock_err;
+
+	ASSERT(ofs != NULL, "add_ctx_files: ofs == NULL");
+
+	err = pthread_rwlock_rdlock(&ofs->fls_lock);
+	ASSERT(err == 0,
+	       "insert_new_file: failed to acquire read lock on fls_lock");
+
+	// We need to allocate space for more files
+	if (fd >= ofs->fls_sz) {
+		// release read lock so we can safely take write lock
+		err = pthread_rwlock_unlock(&ofs->fls_lock);
+		ASSERT(err == 0,
+		       "insert_new_file: failed to release read lock on fls_lock");
+
+		// reallocate fls to double previous size
+		// This will take write lock on fls before
+		// allocating more space.
+		err = realloc_fdls(ofs, fd);
+		if (err != CODE_SUCCESS)
+			goto out; // No lock taken so jump to out.
+
+		// retake read lock on fls
+		err = pthread_rwlock_rdlock(&ofs->fls_lock);
+	}
+
+	ASSERT(fd < ofs->fls_sz, "add_ctx_files: fd >= ofs->fls_sz");
+
+	working_fd = ofs->fdls[fd];
+	if (working_fd == NULL) {
+		err = initialize_fd(&working_fd);
+		if (err != CODE_SUCCESS)
+			goto unlock;
+	}
+
+	err = add_file_to_fdls(f, working_fd);
+
+unlock:
+	lock_err = pthread_rwlock_unlock(&ofs->fls_lock);
+	if (lock_err != 0) {
+		fprintf(stderr, "add_ctx_file: failed to release read lock\n");
+		err = CODE_FAILED;
+	}
+
+out:
+	return err;
+}
+
+static int insert_socket_creation(struct process_context *ctx,
+				  struct message_state *ms)
+{
+	ASSERT(ms != NULL, "insert_socket_creation: ms == NULL");
+	ASSERT(ctx != NULL, "insert_socket_creation: ctx == NULL");
+	ASSERT(ctx->files != NULL,
+	       "insert_socket_creation: ctx->files == NULL");
+
+	struct file *f;
+	struct connections *c;
+	struct socket_create *sock;
+	struct probe_event_header *eh;
+	int err;
+
+	sock = (struct socket_create *)ms->primary_data;
+	eh = (struct probe_event_header *)ms->primary_data;
+
+	f = (struct file *)calloc(1UL, sizeof(struct file));
+	if (f == NULL)
+		return CODE_FAILED;
+
+	c = (struct connections *)calloc(1UL, sizeof(struct connections));
+	if (c == NULL)
+		return CODE_FAILED;
+
+	c->sock = (struct socket_create *)calloc(1UL,
+						 sizeof(struct socket_create));
+	if (c->sock == NULL)
+		return CODE_FAILED;
+
+	// write socket_create info into connection
+	__builtin_memcpy(c->sock, sock, sizeof(struct socket_create));
+
+	// add file information
+	__builtin_memcpy(&f->eh, eh, sizeof(struct probe_event_header));
+	f->type = F_SOCK;
+	f->i_ino = sock->i_ino;
+	f->obj = c;
+	f->next = NULL;
+
+	err = insert_new_file(ctx, &f, sock->sockfd);
+
+	return err;
 }
 
 static int populate_socket_event(struct process_context *ctx,

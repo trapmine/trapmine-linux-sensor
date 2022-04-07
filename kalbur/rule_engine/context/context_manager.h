@@ -16,8 +16,8 @@
 #include <events.h>
 #include <pthread.h>
 
-// The key of a process is the crc32_hash(tgid_pid, comm)
-#define CONTEXT_KEY_LEN sizeof(uint64_t) + TASK_COMM_LEN
+// The key of a process is the crc32_hash(syscall_nr, tgid_pid, comm)
+#define CONTEXT_KEY_LEN (sizeof(uint64_t) + TASK_COMM_LEN)
 
 // We explicitely copy the relevant data needed for process_context hash
 // so that if struct probe_event_header changes, our hashing doesnt break
@@ -27,16 +27,38 @@
 	__builtin_memcpy(&(key[sizeof(uint64_t)]), eh->comm,                   \
 			 TYPED_MACRO(TASK_COMM_LEN, UL));
 
+#define INIT_FDTABLE_SZ 20
+
 struct connections {
 	struct socket_create *sock;
-	struct tcp_info_t *tcp_info;
-	struct connections *next;
+	tcp_info_t *tcp_info;
+};
+
+enum FILE_TYPE { F_SOCK, F_REG };
+
+struct file {
+	struct probe_event_header eh;
+	enum FILE_TYPE type;
+	uint64_t i_ino;
+	void *obj;
+	struct file *next;
+};
+
+struct fd {
+	pthread_rwlock_t fdlock;
+	struct file *fls;
+};
+
+struct open_files {
+	pthread_rwlock_t fls_lock;
+	int fls_sz;
+	struct fd **fdls;
 };
 
 // TODO: Add open files
 // TODO: Add current working directory
 struct process_context {
-	pthread_mutex_t ctx_lock;
+	pthread_rwlock_t ctx_lock;
 	uint64_t tgid_pid;
 	char comm[TASK_COMM_LEN];
 	struct creds credentials;
@@ -48,7 +70,7 @@ struct process_context {
 	char *parent_path;
 	char parent_comm[TASK_COMM_LEN];
 	struct stdio io[3];
-	struct connections *open_sockets;
+	struct open_files *files;
 };
 
 int manage_process_context(safetable_t *ht, safetable_t *event_counter,
