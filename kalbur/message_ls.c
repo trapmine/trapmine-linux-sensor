@@ -201,8 +201,9 @@ struct message_state *get_message(struct msg_list *head,
 
 	ASSERT(ms == NULL, "get_message: ms != NULL");
 	ms = allocate_message_struct(eh_incoming->syscall_nr, cpu);
-	if (ms != NULL)
+	if (ms != NULL) {
 		link_message(head, ms);
+	}
 
 	return ms;
 }
@@ -277,9 +278,21 @@ void garbage_collect(struct msg_list *head, safetable_t *counter)
 
 		if (IS_MS_STALE(ms)) {
 #ifdef __DEBUG__
+			struct probe_event_header *eh;
+			unsigned char key[CONTEXT_KEY_LEN];
+			uint64_t e;
+			eh = ms->primary_data;
+			printf("{\n");
+			printf("\tStale message. syscall: %d, tgid_pid: %lu, comm: %s\n",
+			       eh->syscall_nr, eh->tgid_pid, eh->comm);
+			// print count of elements
+			BUILD_PROCESS_HASH_KEY(key, eh);
+			e = (uint64_t)safe_get(counter, key, CONTEXT_KEY_LEN);
+			printf("\tnumber of pending events: %lu\n", e);
+			printf("}\n");
 			stale += 1;
 #endif
-			transition_ms_progress(ms, MS_GC, CODE_SUCCESS);
+			//	transition_ms_progress(ms, MS_GC, CODE_SUCCESS);
 		}
 
 		// decrement counter and remove message

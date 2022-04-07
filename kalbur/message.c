@@ -363,6 +363,16 @@ static void transition_end_state(struct message_state *ms)
 	}
 }
 
+static void increment_stale(struct message_state *ms)
+{
+	ms->stale += 1;
+}
+
+static int check_stale_limit(struct message_state *ms)
+{
+	return (ms->stale >= STALE_LIMIT);
+}
+
 // Check if we can transition ms progress state to MS_CTX_SAVED (context saved)
 static void transition_context(struct message_state *ms, int prog_err)
 {
@@ -376,9 +386,13 @@ static void transition_context(struct message_state *ms, int prog_err)
 		// something irrecoverable happened. Don't bother inserting
 		// this message into context
 		transition_progress(ms, MS_IGNORE_CTX_SAVE);
+	} else if (prog_err == CODE_RETRY) {
+		// We will retry upto STALE_LIMIT times after that we ignore
+		// the message
+		increment_stale(ms);
+		if (check_stale_limit(ms))
+			transition_progress(ms, MS_IGNORE_CTX_SAVE);
 	}
-	// if prog_err == CODE_RETRY, we do not transition to next state
-	// This is so that the engine retries with this same message again
 
 	// Decide whether ms is ready for garbage collection
 	transition_end_state(ms);
