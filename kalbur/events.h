@@ -168,6 +168,7 @@ struct exit_event {
 
 struct socket_create {
 	struct probe_event_header eh;
+	int sockfd;
 	u64_t i_ino;
 	int family;
 	int type;
@@ -176,6 +177,7 @@ struct socket_create {
 
 struct tcp_ipv4_info {
 	struct probe_event_header eh;
+	int sockfd;
 	u64_t i_ino;
 	u64_t type;
 	u16_t sport;
@@ -186,6 +188,7 @@ struct tcp_ipv4_info {
 
 struct tcp_ipv6_info {
 	struct probe_event_header eh;
+	int sockfd;
 	u64_t i_ino;
 	u64_t type;
 	u16_t sport;
