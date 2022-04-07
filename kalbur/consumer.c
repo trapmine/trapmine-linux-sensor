@@ -100,9 +100,6 @@ void *consumer(void *arg)
 	ASSERT(head != NULL, "consumer: head == NULL");
 
 	while (true) {
-#ifdef __DEBUG__
-		printf("[%ld] Going to sleep.\n", info->thread_id);
-#endif
 		err = pthread_mutex_lock(&info->mtx);
 		ASSERT(err == 0,
 		       "consumer: pthread_mutex_lock(info->mtx) != 0");
@@ -111,10 +108,6 @@ void *consumer(void *arg)
 			ASSERT(err == 0,
 			       "consumer: pthread_cond_wait(head->wakeup) != 0");
 		}
-#ifdef __DEBUG__
-		printf("[%ld] Starting thread iter: %d\n", info->thread_id,
-		       head->elements);
-#endif
 
 		if (info->die)
 			goto error;
@@ -132,11 +125,6 @@ void *consumer(void *arg)
 					invoke_engine(ms, db, hash_table,
 						      info->safe_hashtable,
 						      info->event_counter);
-					//	err = save_msg(db, hash_table, ms);
-					//	if (err == CODE_SUCCESS) {
-					//		set_saved(ms);
-					//	} else if (err == CODE_FAILED)
-					//		set_discard(ms);
 				}
 				pthread_mutex_unlock(&(ms->message_state_lock));
 			}
