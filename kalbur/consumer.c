@@ -68,10 +68,9 @@ error:
 }
 
 static void invoke_engine(struct message_state *ms, sqlite3 *db,
-			  hashtable_t *ht, safetable_t *table,
-			  safetable_t *event_counter)
+			  hashtable_t *ht)
 {
-	process_message(ms, db, ht, table, event_counter);
+	process_message(ms, db, ht);
 }
 
 static int consume_ms(struct message_state *ms)
@@ -122,9 +121,7 @@ void *consumer(void *arg)
 			if (pthread_mutex_trylock(&(ms->message_state_lock)) ==
 			    0) {
 				if (consume_ms(ms)) {
-					invoke_engine(ms, db, hash_table,
-						      info->safe_hashtable,
-						      info->event_counter);
+					invoke_engine(ms, db, hash_table);
 				}
 				pthread_mutex_unlock(&(ms->message_state_lock));
 			}

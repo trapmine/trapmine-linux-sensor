@@ -50,7 +50,6 @@ As long as the worker_threads are running the main_thread cannot begin garbage c
 #include <err.h>
 #include <stdlib.h>
 #include <message.h>
-#include <context_manager.h>
 #include "message_ls.h"
 
 struct msg_list *initialize_msg_list(void)
@@ -208,6 +207,17 @@ struct message_state *get_message(struct msg_list *head,
 	return ms;
 }
 
+// The key of a process is the crc32_hash(syscall_nr, tgid_pid, comm)
+#define CONTEXT_KEY_LEN (sizeof(uint64_t) + TASK_COMM_LEN)
+
+// We explicitely copy the relevant data needed for process_context hash
+// // so that if struct probe_event_header changes, our hashing doesnt break
+#define BUILD_PROCESS_HASH_KEY(key, eh)                                        \
+	__builtin_memset(key, 0, CONTEXT_KEY_LEN);                             \
+	__builtin_memcpy(key, &eh->tgid_pid, sizeof(uint64_t));                \
+	__builtin_memcpy(&(key[sizeof(uint64_t)]), eh->comm,                   \
+			 TYPED_MACRO(TASK_COMM_LEN, UL));
+
 void count_event(struct message_state *ms, safetable_t *counter, bool inc)
 {
 	struct probe_event_header *eh;
@@ -241,75 +251,18 @@ void garbage_collect(struct msg_list *head, safetable_t *counter)
 	struct message_state *ms;
 	struct message_state *tmp;
 
-#ifdef __DEBUG__
-	int complete = 0;
-	int ctx_saved = 0;
-	int db_saved = 0;
-	int gc = 0;
-	int igctx = 0;
-	int stale = 0;
-#endif
-
 	ms = head->first;
 
 	while (ms != NULL) {
 		tmp = ms->next_msg;
 
-#ifdef __DEBUG__
-		if (IS_MS_COMPLETE(ms))
-			complete += 1;
-		if (IS_MS_DB_SAVED(ms))
-			db_saved += 1;
-		if (IS_MS_CTX_SAVED(ms))
-			ctx_saved += 1;
-		if (IS_MS_IGNORE_CTX_SAVE(ms))
-			igctx += 1;
-#endif
-
-		// if message is complete, and db saved
-		// increment stale count.
-		// If stale count reaches STALE limit, we
-		// consider the event to be garbage
-		// This technique helps us flush events for
-		// processes started before the sensor
-		if ((IS_MS_COMPLETE(ms)) && (IS_MS_DB_SAVED(ms))) {
-			ms->stale += 1;
-		}
-
-		if (IS_MS_STALE(ms)) {
-#ifdef __DEBUG__
-			struct probe_event_header *eh;
-			unsigned char key[CONTEXT_KEY_LEN];
-			uint64_t e;
-			eh = ms->primary_data;
-			printf("{\n");
-			printf("\tStale message. syscall: %d, tgid_pid: %lu, comm: %s\n",
-			       eh->syscall_nr, eh->tgid_pid, eh->comm);
-			// print count of elements
-			BUILD_PROCESS_HASH_KEY(key, eh);
-			e = (uint64_t)safe_get(counter, key, CONTEXT_KEY_LEN);
-			printf("\tnumber of pending events: %lu\n", e);
-			printf("}\n");
-			stale += 1;
-#endif
-			//	transition_ms_progress(ms, MS_GC, CODE_SUCCESS);
-		}
-
 		// decrement counter and remove message
 		if (IS_MS_GC(ms)) {
-#ifdef __DEBUG__
-			gc += 1;
-#endif
 			count_event(ms, counter, false);
 			remove_message_from_list(head, &ms);
 		}
 		ms = tmp;
 	}
-
-#ifdef __DEBUG__
-	printf("complete: %d\nctx saved: %d\ndb saved: %d\ngc: %d\nignore ctx: %d\nstale: %d\n\n",
-	       complete, ctx_saved, db_saved, gc, igctx, stale);
-#endif
 }
 
 void *delete_message_list(struct msg_list *head)

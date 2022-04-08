@@ -31,19 +31,6 @@
 static struct thread_msg **threads;
 size_t thread_num = 0;
 
-static void backtrace_handler(int sig)
-{
-	void *trace[30];
-	int size;
-
-	size = backtrace(trace, 30);
-
-	fprintf(stderr, "Error: signal: %d\n", sig);
-	backtrace_symbols_fd(trace, size, STDERR_FILENO);
-
-	exit(1);
-}
-
 /* Send wakeup signal to each sleeping thread
  * We wakeup each thread, because under high workloads
  * the system generates multiple event before a thread has 
@@ -293,8 +280,7 @@ static safetable_t *initialize_safetable(void)
 	return init_safetable();
 }
 
-static void initialize_thread_ls(struct msg_list *head, safetable_t *table,
-				 safetable_t *counter)
+static void initialize_thread_ls(struct msg_list *head)
 {
 	size_t i;
 	int err;
@@ -309,8 +295,6 @@ static void initialize_thread_ls(struct msg_list *head, safetable_t *table,
 			exit(1);
 		}
 
-		threads[i]->safe_hashtable = table;
-		threads[i]->event_counter = counter;
 		threads[i]->ready = false;
 		threads[i]->die = false;
 		threads[i]->head = head;
@@ -357,7 +341,7 @@ int main(int argc, char **argv)
 	struct proc_monitor_bpf *skel = NULL;
 	struct msg_list *head = NULL;
 	struct rlimit limit = { 0 };
-	safetable_t *table, *counter;
+	safetable_t *counter;
 	struct callback_ctx *ctx;
 	int err;
 
@@ -369,7 +353,6 @@ int main(int argc, char **argv)
 	/* Enable core dumping */
 	limit.rlim_cur = RLIM_INFINITY;
 	limit.rlim_max = RLIM_INFINITY;
-
 	err = setrlimit(RLIMIT_CORE, &limit);
 	if (err != 0) {
 		fprintf(stderr, "Failed to setrlimit: %d\n", errno);
@@ -378,9 +361,6 @@ int main(int argc, char **argv)
 	/* Turn off buffering */
 	setvbuf(stdout, NULL, _IONBF, 0UL);
 	setvbuf(stderr, NULL, _IONBF, 0UL);
-
-	/* setup signal handlers */
-	signal(SIGSEGV, backtrace_handler);
 
 	/* Load and attach bpf programs */
 	skel = load();
@@ -414,19 +394,11 @@ int main(int argc, char **argv)
 		goto out;
 	}
 
-	/* initialize safetable */
-	table = initialize_safetable();
-	if (table == NULL) {
-		fprintf(stderr,
-			"Failed to initialize hashtable for holding running process context\n");
-		goto out;
-	}
-
 	/* Initialize perf buffer callback context */
 	ctx = initialize_callback_ctx(head, counter);
 
 	/* Initialize threads */
-	initialize_thread_ls(head, table, counter);
+	initialize_thread_ls(head);
 	init_threads();
 
 	err = poll_buff(bpf_map__fd(skel->maps.streamer), consume_kernel_events,

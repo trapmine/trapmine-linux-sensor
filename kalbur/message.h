@@ -88,20 +88,13 @@ struct mmap_dump_fmt {
 
 typedef int (*message_complete_predicate)(struct message_state *);
 
-#define STALE_LIMIT 50
-
 #define MS_COMPLETE (1UL << 0)
-#define MS_CTX_SAVED (1UL << 1)
 #define MS_DB_SAVED (1UL << 2)
 #define MS_GC (1UL << 3)
-#define MS_IGNORE_CTX_SAVE (1UL << 4)
 
 #define IS_MS_COMPLETE(ms) (((ms->progress) & (MS_COMPLETE)) != 0)
 #define IS_MS_DB_SAVED(ms) (((ms->progress) & (MS_DB_SAVED)) != 0)
-#define IS_MS_CTX_SAVED(ms) (((ms->progress) & (MS_CTX_SAVED)) != 0)
 #define IS_MS_GC(ms) (((ms->progress) & (MS_GC)) != 0)
-#define IS_MS_IGNORE_CTX_SAVE(ms) (((ms->progress) & MS_IGNORE_CTX_SAVE) != 0)
-#define IS_MS_STALE(ms) ((ms->stale) >= STALE_LIMIT)
 
 struct message_state {
 	pthread_mutex_t message_state_lock;
@@ -120,7 +113,6 @@ struct message_state {
 		*prev_msg; // Needed inorder to link and unlink new messages
 	int cpu;
 	uint64_t progress;
-	unsigned int stale;
 };
 
 int construct_message_state(struct message_state *ms,

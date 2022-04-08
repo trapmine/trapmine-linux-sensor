@@ -352,50 +352,8 @@ static void transition_end_state(struct message_state *ms)
 	}
 
 	if (IS_MS_DB_SAVED(ms)) {
-		if (IS_MS_CTX_SAVED(ms)) {
-			transition_progress(ms, MS_GC);
-			return;
-		}
-		if (IS_MS_IGNORE_CTX_SAVE(ms)) {
-			transition_progress(ms, MS_GC);
-			return;
-		}
+		transition_progress(ms, MS_GC);
 	}
-}
-
-static void increment_stale(struct message_state *ms)
-{
-	ms->stale += 1;
-}
-
-static int check_stale_limit(struct message_state *ms)
-{
-	return (ms->stale >= STALE_LIMIT);
-}
-
-// Check if we can transition ms progress state to MS_CTX_SAVED (context saved)
-static void transition_context(struct message_state *ms, int prog_err)
-{
-	ASSERT((IS_MS_COMPLETE(ms)) != 0,
-	       "transition_context: ms->progress not set to completed");
-
-	if (prog_err == CODE_SUCCESS) {
-		// process context was successfuly updated
-		transition_progress(ms, MS_CTX_SAVED);
-	} else if (prog_err == CODE_FAILED) {
-		// something irrecoverable happened. Don't bother inserting
-		// this message into context
-		transition_progress(ms, MS_IGNORE_CTX_SAVE);
-	} else if (prog_err == CODE_RETRY) {
-		// We will retry upto STALE_LIMIT times after that we ignore
-		// the message
-		increment_stale(ms);
-		if (check_stale_limit(ms))
-			transition_progress(ms, MS_IGNORE_CTX_SAVE);
-	}
-
-	// Decide whether ms is ready for garbage collection
-	transition_end_state(ms);
 }
 
 // Check if we can transition ms progress state to MS_DB_SAVED (saved in sqlite db)
@@ -429,9 +387,6 @@ void transition_ms_progress(struct message_state *ms,
 	switch (transition_target) {
 	case MS_COMPLETE:
 		transition_complete(ms, prog_err);
-		break;
-	case MS_CTX_SAVED:
-		transition_context(ms, prog_err);
 		break;
 	case MS_DB_SAVED:
 		transition_db_saved(ms, prog_err);

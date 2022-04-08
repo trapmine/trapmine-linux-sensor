@@ -20,7 +20,7 @@ SAFE = $(UTIL_DIR)/safe_hash.o
 SYMSEARCH = $(UTIL_DIR)/symsearch.o
 HELPERS_FN = $(UTIL_DIR)/helpers.o
 
-RULE_ENGINE = $(DATABASE_DIR)/database.o $(DATABASE_DIR)/rules.o $(DATABASE_DIR)/notifier.o $(ENGINE_DIR)/engine.o $(ENGINE_DIR)/save_ms.o $(CONTEXT_DIR)/context_manager.o $(CONTEXT_DIR)/populate.o
+RULE_ENGINE = $(DATABASE_DIR)/database.o $(DATABASE_DIR)/rules.o $(DATABASE_DIR)/notifier.o $(ENGINE_DIR)/engine.o $(ENGINE_DIR)/save_ms.o 
 
 HELPERS = $(HASH) $(RULE_ENGINE) $(SYMSEARCH) $(HELPERS_FN) $(SAFE)
 SQLITE3 = $(INC_DIR)/sqlite3.o
