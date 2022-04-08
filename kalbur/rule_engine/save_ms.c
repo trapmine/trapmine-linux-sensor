@@ -21,10 +21,8 @@
 
 #define HANDLE_FAIL_JUMP(err)                                                  \
 	do {                                                                   \
-		if (err == CODE_FAILED)                                        \
+		if (err != CODE_SUCCESS)                                       \
 			goto out;                                              \
-		if (err == CODE_RETRY)                                         \
-			goto rollback;                                         \
 	} while (0)
 
 static int save_mmap_helper(sqlite3 *db, hashtable_t *ht, struct proc_mmap *pm,
@@ -75,10 +73,13 @@ MESSAGE_HANDLER_FUNC(save_mmap_event)
 
 	err = begin_transaction(db, ht);
 	if (err != CODE_SUCCESS)
-		goto out;
+		return err;
 
 	event_id = insert_event(db, ht, eh);
-	HANDLE_FAIL_JUMP(event_id);
+	if (ERR_NOT_SUCCESS(event_id)) {
+		err = event_id;
+		goto out;
+	}
 
 	err = save_mmap_helper(db, ht, pm, MESSAGE_STRING(ms), event_id);
 	HANDLE_FAIL_JUMP(err);
@@ -93,13 +94,11 @@ MESSAGE_HANDLER_FUNC(save_mmap_event)
 
 	return err;
 
-rollback:
-	err = CODE_RETRY;
+out:
 	rollback_err = rollback_transaction(db, ht);
 	ASSERT(rollback_err == CODE_SUCCESS,
 	       "save_mmap_event: err (rollback_transaction) != CODE_SUCCESS");
 
-out:
 	return err;
 }
 
@@ -116,15 +115,21 @@ MESSAGE_HANDLER_FUNC(save_execve_event)
 
 	err = begin_transaction(db, ht);
 	if (err != CODE_SUCCESS)
-		goto out;
+		return err;
 
 	event_id = insert_event(db, ht, eh);
-	HANDLE_FAIL_JUMP(event_id);
+	if (ERR_NOT_SUCCESS(event_id)) {
+		err = event_id;
+		goto out;
+	}
 
 	pinfo = (struct process_info *)ms->primary_data;
 	f = pinfo->file;
 	file_id = insert_file_info(db, ht, MESSAGE_STRING(ms), &f);
-	HANDLE_FAIL_JUMP(file_id);
+	if (ERR_NOT_SUCCESS(file_id)) {
+		err = file_id;
+		goto out;
+	}
 
 	err = insert_proc_info(db, ht, ms, event_id, file_id);
 	HANDLE_FAIL_JUMP(err);
@@ -141,57 +146,69 @@ MESSAGE_HANDLER_FUNC(save_execve_event)
 	}
 
 	err = commit_transaction(db, ht);
-	if (err != CODE_SUCCESS)
+	if (err != CODE_SUCCESS) {
 		fprintf(stderr,
 			"save_execve_event: failed to commit transaction: %s\n",
+			sqlite3_errmsg(db));
+		goto out;
+	}
+
+	return err;
+
+out:
+	printf("execve event failed: %lu: %s: %d\n", eh->tgid_pid, eh->comm,
+	       err);
+	rollback_err = rollback_transaction(db, ht);
+	ASSERT(rollback_err == CODE_SUCCESS,
+	       "save_execve: err (rollback_transaction) != CODE_SUCCESS");
+	return err;
+}
+
+MESSAGE_HANDLER_FUNC(save_fork_and_friends_event)
+{
+	int event_id, file_id;
+	int err, rollback_err;
+	struct process_info *pinfo;
+	struct file_info f;
+	struct probe_event_header *eh =
+		(struct probe_event_header *)ms->primary_data;
+
+	err = begin_transaction(db, ht);
+	if (err != CODE_SUCCESS)
+		return err;
+
+	event_id = insert_event(db, ht, eh);
+	if (ERR_NOT_SUCCESS(event_id)) {
+		err = event_id;
+		goto out;
+	}
+
+	pinfo = (struct process_info *)ms->primary_data;
+	f = pinfo->file;
+	file_id = insert_file_info(db, ht, MESSAGE_STRING(ms), &f);
+	if (ERR_NOT_SUCCESS(file_id)) {
+		err = file_id;
+		goto out;
+	}
+
+	err = insert_proc_info(db, ht, ms, event_id, file_id);
+	HANDLE_FAIL_JUMP(err);
+
+	err = commit_transaction(db, ht);
+	if (err != CODE_SUCCESS)
+		fprintf(stderr,
+			"save_fork_and_friends_event: failed to commit transaction: %s\n",
 			sqlite3_errmsg(db));
 
 	HANDLE_FAIL_JUMP(err);
 
 	return err;
 
-rollback:
-	err = CODE_RETRY;
+out:
 	rollback_err = rollback_transaction(db, ht);
 	ASSERT(rollback_err == CODE_SUCCESS,
-	       "save_execve: err (rollback_transaction) != CODE_SUCCESS");
-out:
+	       "save_fork_and_friends_event: err (rollback_transaction) != CODE_SUCCESS");
 	return err;
-}
-
-MESSAGE_HANDLER_FUNC(save_fork_and_friends_event)
-{
-	return CODE_SUCCESS;
-	//	int event_id, err, rollback_err;
-	//
-	//	err = begin_transaction(db, ht);
-	//	if (err != CODE_SUCCESS)
-	//		goto out;
-	//
-	//	event_id = insert_event(db, ht,
-	//				(struct probe_event_header *)ms->primary_data);
-	//	HANDLE_FAIL_JUMP(event_id);
-	//
-	//	err = insert_fork_and_friends_event(db, ht, ms, event_id);
-	//	HANDLE_FAIL_JUMP(err);
-	//
-	//	err = commit_transaction(db, ht);
-	//	if (err == CODE_FAILED)
-	//		fprintf(stderr,
-	//			"save_fork_and_friends_event: failed to commit transaction: %s\n",
-	//			sqlite3_errmsg(db));
-	//
-	//	HANDLE_FAIL_JUMP(err);
-	//
-	//	return err;
-	//
-	//rollback:
-	//	err = CODE_RETRY;
-	//	rollback_err = rollback_transaction(db, ht);
-	//	ASSERT(rollback_err == CODE_SUCCESS,
-	//	       "save_tcp_connection_event: err (rollback_transaction) != CODE_SUCCESS");
-	//out:
-	//	return err;
 }
 
 MESSAGE_HANDLER_FUNC(save_mprotect_event)
@@ -205,11 +222,14 @@ MESSAGE_HANDLER_FUNC(save_socket_create_event)
 
 	err = begin_transaction(db, ht);
 	if (err != CODE_SUCCESS)
-		goto out;
+		return err;
 
 	event_id = insert_event(db, ht,
 				(struct probe_event_header *)ms->primary_data);
-	HANDLE_FAIL_JUMP(event_id);
+	if (ERR_NOT_SUCCESS(event_id)) {
+		err = event_id;
+		goto out;
+	}
 
 	err = insert_socket_create_info(db, ht, ms, event_id);
 	HANDLE_FAIL_JUMP(err);
@@ -223,13 +243,11 @@ MESSAGE_HANDLER_FUNC(save_socket_create_event)
 	HANDLE_FAIL_JUMP(err);
 
 	return err;
-rollback:
-	err = CODE_RETRY;
+out:
 	rollback_err = rollback_transaction(db, ht);
 	ASSERT(rollback_err == CODE_SUCCESS,
 	       "save_socket_create_event: err (rollback_transaction) != CODE_SUCCESS");
 
-out:
 	return err;
 }
 
@@ -239,11 +257,14 @@ MESSAGE_HANDLER_FUNC(save_tcp_connection_event)
 
 	err = begin_transaction(db, ht);
 	if (err != CODE_SUCCESS)
-		goto out;
+		return err;
 
 	event_id = insert_event(db, ht,
 				(struct probe_event_header *)ms->primary_data);
-	HANDLE_FAIL_JUMP(event_id);
+	if (ERR_NOT_SUCCESS(event_id)) {
+		err = event_id;
+		goto out;
+	}
 
 	err = insert_tcp_conn_info(db, ht, ms, event_id);
 	HANDLE_FAIL_JUMP(err);
@@ -257,12 +278,10 @@ MESSAGE_HANDLER_FUNC(save_tcp_connection_event)
 	HANDLE_FAIL_JUMP(err);
 
 	return err;
-rollback:
-	err = CODE_RETRY;
+out:
 	rollback_err = rollback_transaction(db, ht);
 	ASSERT(rollback_err == CODE_SUCCESS,
 	       "save_tcp_connection_event: err (rollback_transaction) != CODE_SUCCESS");
-out:
 	return err;
 }
 
@@ -271,41 +290,6 @@ out:
 MESSAGE_HANDLER_FUNC(save_lpe_commit_creds_event)
 {
 	return CODE_SUCCESS;
-
-	//	int event_id, err, rollback_err;
-	//	struct cfg_integrity* cfg;
-	//
-	//	cfg = (struct cfg_integrity *)ms->primary_data;
-	//	if (is_commit_creds_parent(cfg->caller_addr)) {
-	//		err = CODE_FAILED;
-	//		goto out;
-	//	}
-	//	printf("LPE attempt called addr: %lx. Program: %s(%lu)\n", cfg->caller_addr, cfg->eh.comm, cfg->eh.tgid_pid);
-	//
-	//	err = begin_transaction(db, ht);
-	//	if (err != CODE_SUCCESS)
-	//		goto out;
-	//
-	//	event_id = insert_event(db, ht, (struct probe_event_header *)ms->primary_data);
-	//	HANDLE_FAIL_JUMP(event_id);
-	//
-	//	err = insert_lpe_info(db, ht, ms, event_id);
-	//	HANDLE_FAIL_JUMP(err);
-	//
-	//	err = commit_transaction(db, ht);
-	//	if (err == CODE_FAILED)
-	//		fprintf(stderr, "save_lpe_commit_creds_event: failed to commit transaction: %s\n", sqlite3_errmsg(db));
-	//
-	//	HANDLE_FAIL_JUMP(err);
-	//
-	//	return err;
-	//
-	//rollback:
-	//	err = CODE_RETRY;
-	//	rollback_err = rollback_transaction(db, ht);
-	//	ASSERT(rollback_err == CODE_SUCCESS, "save_lpe_commit_creds_event: err (rollback_transaction) != CODE_SUCCESS");
-	//out:
-	//	return err;
 }
 
 static int cmp_dumps(const void *d1, const void *d2)
@@ -388,11 +372,14 @@ MESSAGE_HANDLER_FUNC(save_ptrace_event)
 
 	err = begin_transaction(db, ht);
 	if (err != CODE_SUCCESS)
-		goto out;
+		return err;
 
 	event_id = insert_event(db, ht,
 				(struct probe_event_header *)ms->primary_data);
-	HANDLE_FAIL_JUMP(event_id);
+	if (ERR_NOT_SUCCESS(event_id)) {
+		err = event_id;
+		goto out;
+	}
 
 	err = insert_ptrace_event(db, ht, ms, event_id);
 	HANDLE_FAIL_JUMP(err);
@@ -407,13 +394,10 @@ MESSAGE_HANDLER_FUNC(save_ptrace_event)
 
 	return err;
 
-rollback:
-	err = CODE_RETRY;
+out:
 	rollback_err = rollback_transaction(db, ht);
 	ASSERT(rollback_err == CODE_SUCCESS,
 	       "save_ptrace_event: err (rollback_transaction) != CODE_SUCCESS");
-
-out:
 	return err;
 }
 
@@ -425,16 +409,22 @@ MESSAGE_HANDLER_FUNC(save_kernel_module_load_info)
 
 	err = begin_transaction(db, ht);
 	if (err != CODE_SUCCESS)
-		goto out;
+		return err;
 
 	event_id = insert_event(db, ht,
 				(struct probe_event_header *)ms->primary_data);
-	HANDLE_FAIL_JUMP(event_id);
+	if (ERR_NOT_SUCCESS(event_id)) {
+		err = event_id;
+		goto out;
+	}
 
 	kinfo = (struct kernel_module_load_info *)ms->primary_data;
 	f = kinfo->f;
 	file_id = insert_file_info(db, ht, MESSAGE_STRING(ms), &f);
-	HANDLE_FAIL_JUMP(file_id);
+	if (ERR_NOT_SUCCESS(event_id)) {
+		err = file_id;
+		goto out;
+	}
 
 	err = insert_kernel_module_info(db, ht, file_id, event_id);
 	HANDLE_FAIL_JUMP(err);
@@ -449,13 +439,11 @@ MESSAGE_HANDLER_FUNC(save_kernel_module_load_info)
 
 	return err;
 
-rollback:
-	err = CODE_RETRY;
+out:
 	rollback_err = rollback_transaction(db, ht);
 	ASSERT(rollback_err == CODE_SUCCESS,
 	       "save_kernel_module_load_info: err (rollback_transaction) != CODE_SUCCESS");
 
-out:
 	return err;
 }
 

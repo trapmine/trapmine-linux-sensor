@@ -116,13 +116,6 @@ struct proc_mmap {
 	struct file_info uf;
 };
 
-//struct child_proc_info {
-//	struct probe_event_header eh;
-//	u64_t tgid_pid; // tgid_pid of forked process. event header contains tgid_pid of calling process.
-//	u64_t ppid;
-//	u64_t clone_flags;
-//};
-
 struct mprotect_info {
 	struct probe_event_header eh;
 	size_t modn; // the number of vma's modified
@@ -150,10 +143,12 @@ struct process_info {
 	struct {
 		u32_t argv_offset;
 		u32_t nbytes;
+		u32_t present;
 	} args;
 	struct {
 		u32_t env_offset;
 		u32_t nbytes;
+		u32_t present;
 	} env;
 	u32_t interp_str_offset;
 	struct creds credentials;

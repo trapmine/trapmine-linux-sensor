@@ -342,6 +342,9 @@ int insert_file_info(sqlite3 *db, hashtable_t *ht, char *string_data,
 	sqlite3_stmt *ppStmt;
 	char *filename = NULL;
 
+	if (f->i_ino == 0)
+		return CODE_FAILED;
+
 	// If file information already exists in database return its ID.
 	file_id = select_file_info_row(db, ht, f->i_ino, f->s_magic);
 	if (file_id != CODE_FAILED)
@@ -452,7 +455,8 @@ int insert_proc_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 	struct process_info *pinfo = NULL;
 	char *string_data = NULL;
 	char *args = NULL;
-	uint32_t argv_off;
+	char *env = NULL;
+	uint32_t argv_off, env_off;
 
 	ppStmt = hash_get(ht, INSERT_PROCESS_INFO, sizeof(INSERT_PROCESS_INFO));
 	if (ppStmt == NULL) {
@@ -479,6 +483,16 @@ int insert_proc_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 	SQLITE3_BIND_INT("insert_proc_info", int, EGID,
 			 pinfo->credentials.egid);
 
+	/* save clone_flags if fork/clone */
+	if (IS_FORK_OR_FRIENDS(pinfo->eh.syscall_nr)) {
+		SQLITE3_BIND_INT("insert_proc_info", int64, CLONE_FLAGS,
+				 pinfo->clone_flags);
+	} else {
+		sqlite3_bind_null(ppStmt,
+				  sqlite3_bind_parameter_index(
+					  ppStmt, PARAM_HOLDER(CLONE_FLAGS)));
+	}
+
 	/* save interpreter string */
 	if (pinfo->interp_str_offset == LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE))
 		sqlite3_bind_null(ppStmt,
@@ -488,10 +502,12 @@ int insert_proc_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 		SQLITE3_BIND_STR("insert_proc_info", text, INTERPRETER,
 				 &(string_data[pinfo->interp_str_offset]));
 
+	/* save arguments */
 	argv_off = pinfo->args.argv_offset;
 	ASSERT(argv_off < PER_CPU_STR_BUFFSIZE,
 	       "insert_proc_info: argv_off >= PER_CPU_STR_BUFFSIZE");
-	if (argv_off == LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE)) {
+	if ((pinfo->args.present == 0) ||
+	    argv_off == LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE)) {
 		sqlite3_bind_null(ppStmt, sqlite3_bind_parameter_index(
 						  ppStmt, PARAM_HOLDER(ARGS)));
 	} else {
@@ -502,6 +518,24 @@ int insert_proc_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 			sqlite3_bind_null(ppStmt,
 					  sqlite3_bind_parameter_index(
 						  ppStmt, PARAM_HOLDER(ARGS)));
+	}
+
+	/* save environment variables */
+	env_off = pinfo->env.env_offset;
+	ASSERT(env_off < PER_CPU_STR_BUFFSIZE,
+	       "insert_proc_info: env_off >= PER_CPU_STR_BUFFSIZE");
+	if ((pinfo->env.present == 0) ||
+	    (env_off == LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE))) {
+		sqlite3_bind_null(ppStmt, sqlite3_bind_parameter_index(
+						  ppStmt, PARAM_HOLDER(ENV)));
+	} else {
+		env = build_env(string_data, env_off, pinfo->env.nbytes);
+		if (env != NULL)
+			SQLITE3_BIND_STR("insert_proc_info", text, ENV, env);
+		else
+			sqlite3_bind_null(ppStmt,
+					  sqlite3_bind_parameter_index(
+						  ppStmt, PARAM_HOLDER(ENV)));
 	}
 
 	/* Save standard input, output, err if sockets */

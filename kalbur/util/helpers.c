@@ -24,6 +24,9 @@ char *build_cmdline(char *args_data, uint32_t argv_off, unsigned long nbytes)
 	ASSERT(argv_off != LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE),
 	       "build_env: env_off == LAST_NULL_BYTE");
 
+	if (args_data[argv_off] == 0)
+		return NULL;
+
 	args = calloc(nbytes, sizeof(char));
 	if (args == NULL)
 		return NULL;
@@ -45,6 +48,9 @@ char *build_env(char *env_data, uint32_t env_off, unsigned long nbytes)
 
 	ASSERT(env_off != LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE),
 	       "build_env: env_off == LAST_NULL_BYTE");
+
+	if (env_data[env_off] == 0)
+		return NULL;
 
 	env = calloc(nbytes, sizeof(char));
 	if (env == NULL)
