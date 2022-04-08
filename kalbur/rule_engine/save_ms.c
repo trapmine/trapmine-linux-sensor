@@ -156,8 +156,6 @@ MESSAGE_HANDLER_FUNC(save_execve_event)
 	return err;
 
 out:
-	printf("execve event failed: %lu: %s: %d\n", eh->tgid_pid, eh->comm,
-	       err);
 	rollback_err = rollback_transaction(db, ht);
 	ASSERT(rollback_err == CODE_SUCCESS,
 	       "save_execve: err (rollback_transaction) != CODE_SUCCESS");
