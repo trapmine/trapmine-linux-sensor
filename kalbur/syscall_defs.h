@@ -36,6 +36,16 @@
 #define DUMP_MMAP_DATA -1
 #define LPE_COMMIT_CREDS -2
 #define MODPROBE_OVERWRITE -3
+#define EXIT_EVENT -4
+
+#define IS_PROCESS_LAUNCH(syscall)                                             \
+	((syscall == SYS_EXECVE) || IS_FORK_OR_FRIENDS(syscall))
+
+#define IS_EXIT_EVENT(syscall) (syscall == EXIT_EVENT)
+
+#define IS_SOCKET_EVENT(syscall)                                               \
+	((syscall == SYS_SOCKET) || (syscall == SYS_CONNECT) ||                \
+	 (syscall == SYS_ACCEPT))
 
 #define IS_FORK_OR_FRIENDS(syscall)                                            \
 	((syscall == SYS_FORK) || (syscall == SYS_VFORK) ||                    \
@@ -43,7 +53,8 @@
 
 #define IS_EVENT_HANDLED(syscall)                                              \
 	((IS_SYSCALL_HANDLED(syscall)) || (syscall == DUMP_MMAP_DATA) ||       \
-	 (syscall == LPE_COMMIT_CREDS) || (syscall == MODPROBE_OVERWRITE))
+	 (syscall == LPE_COMMIT_CREDS) || (syscall == MODPROBE_OVERWRITE) ||   \
+	 (syscall == EXIT_EVENT))
 
 #define IS_SYSCALL_HANDLED(syscall)                                            \
 	((IS_FORK_OR_FRIENDS(syscall)) || (syscall == SYS_EXECVE) ||           \

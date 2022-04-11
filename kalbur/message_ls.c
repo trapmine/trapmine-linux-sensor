@@ -55,6 +55,7 @@ As long as the worker_threads are running the main_thread cannot begin garbage c
 struct msg_list *initialize_msg_list(void)
 {
 	struct msg_list *head = calloc(1UL, sizeof(struct msg_list));
+	head->wait_for_gc = false;
 	return head;
 }
 
@@ -175,9 +176,7 @@ struct message_state *get_message(struct msg_list *head,
 {
 	struct message_state *ms;
 	struct probe_event_header *eh;
-	struct message_state *prev_gc;
 	ms = head->first;
-	prev_gc = NULL;
 
 	ASSERT(head != NULL, "get_message: head == NULL");
 	ASSERT(eh_incoming != NULL, "get_message: eh_incoming == NULL");
@@ -187,25 +186,13 @@ struct message_state *get_message(struct msg_list *head,
 		ASSERT(eh != NULL,
 		       "get_message: (eh = get_even_header(ms)) == NULL");
 		if (EVENT_HEADER_EQ(eh_incoming, eh)) {
-			if (!ms->complete) { // to check for repeated wakeups
-				ASSERT(ms->saved == 0,
-				       "get_message: ms->saved == 1");
-				ASSERT(ms->discard == 0,
-				       "get_message: ms->discard == 1");
+			if (!IS_MS_COMPLETE(
+				    ms)) { // to check for repeated wakeups
+				ASSERT(IS_MS_GC(ms) == 0,
+				       "get_message: IS_MS_GC == 1");
 				return ms;
-			} else // If ms->complete and event headers are equal, then ignore
+			} else // If ms is complete and event headers are equal, then ignore
 				return NULL;
-		}
-
-		// Link saved messages together
-		// so freeing later is simpler
-		if (FREEABLE(ms)) {
-			if (prev_gc == NULL)
-				prev_gc = ms;
-			else {
-				prev_gc->next_gc = ms;
-				prev_gc = ms;
-			}
 		}
 
 		ms = ms->next_msg;
@@ -213,29 +200,67 @@ struct message_state *get_message(struct msg_list *head,
 
 	ASSERT(ms == NULL, "get_message: ms != NULL");
 	ms = allocate_message_struct(eh_incoming->syscall_nr, cpu);
-	if (ms != NULL)
+	if (ms != NULL) {
 		link_message(head, ms);
+	}
 
 	return ms;
 }
 
+// The key of a process is the crc32_hash(syscall_nr, tgid_pid, comm)
+#define CONTEXT_KEY_LEN (sizeof(uint64_t) + TASK_COMM_LEN)
+
+// We explicitely copy the relevant data needed for process_context hash
+// // so that if struct probe_event_header changes, our hashing doesnt break
+#define BUILD_PROCESS_HASH_KEY(key, eh)                                        \
+	__builtin_memset(key, 0, CONTEXT_KEY_LEN);                             \
+	__builtin_memcpy(key, &eh->tgid_pid, sizeof(uint64_t));                \
+	__builtin_memcpy(&(key[sizeof(uint64_t)]), eh->comm,                   \
+			 TYPED_MACRO(TASK_COMM_LEN, UL));
+
+void count_event(struct message_state *ms, safetable_t *counter, bool inc)
+{
+	struct probe_event_header *eh;
+	unsigned char key[CONTEXT_KEY_LEN];
+	int64_t ecnt;
+
+	eh = get_event_header(ms);
+	ASSERT(eh != NULL, "count_event: eh == NULL");
+
+	BUILD_PROCESS_HASH_KEY(key, eh);
+	ecnt = (int64_t)safe_get(counter, key, CONTEXT_KEY_LEN);
+	if (inc) {
+		safe_put(counter, key, (void *)(ecnt + 1), CONTEXT_KEY_LEN);
+	} else {
+		// only decrement when message is gc
+		ASSERT(IS_MS_GC(ms) != 0, "count_event: ms not gc");
+
+		ASSERT(ecnt > 0, "count_event: counter <= 0");
+		if ((ecnt - 1) == 0) {
+			safe_delete(counter, key, CONTEXT_KEY_LEN);
+		} else {
+			safe_put(counter, key, (void *)(ecnt - 1),
+				 CONTEXT_KEY_LEN);
+		}
+	}
+}
+
 /* Free all saved messages */
-void garbage_collect(struct msg_list *head, char *caller)
+void garbage_collect(struct msg_list *head, safetable_t *counter)
 {
 	struct message_state *ms;
 	struct message_state *tmp;
 
 	ms = head->first;
-	while (!TO_GC(ms))
-		ms = ms->next_msg;
-
-	if (ms == NULL)
-		return;
 
 	while (ms != NULL) {
-		tmp = ms->next_gc;
-		remove_message_from_list(head, &ms);
+		tmp = ms->next_msg;
 
+		// decrement counter and remove message
+		if (IS_MS_GC(ms)) {
+			count_event(ms, counter, false);
+			remove_message_from_list(head, &ms);
+		}
 		ms = tmp;
 	}
 }

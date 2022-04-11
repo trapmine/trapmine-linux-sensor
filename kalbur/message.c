@@ -76,6 +76,8 @@ struct message_state *allocate_message_struct(int syscall, int cpu)
 		ms->pred = is_lpe_commit_creds_complete;
 	else if (syscall == MODPROBE_OVERWRITE)
 		ms->pred = is_modprobe_overwrite_complete;
+	else if (syscall == EXIT_EVENT)
+		ms->pred = is_exit_complete;
 	else { // This case should never happen thus the strange assert
 		ASSERT(1 == 0, "allocate_message_struct: unexpected syscall");
 		goto error;
@@ -288,7 +290,7 @@ static struct message_state *free_message(struct message_state *ms)
 
 	// We should only be freeing from the free list
 	// which in turn should only contain saved messages
-	ASSERT(((ms->saved == 1) || (ms->discard == 1)) && (ms->complete == 1),
+	ASSERT((IS_MS_GC(ms) != 0) && (IS_MS_COMPLETE(ms) != 0),
 	       "free_message_contents: invalid value of ms->saved or ms->complete");
 
 	if (ms->primary_data != NULL) {
@@ -314,7 +316,6 @@ static struct message_state *free_message(struct message_state *ms)
 
 	// misc
 	ms->pred = NULL;
-	ms->next_gc = NULL;
 
 	free(ms);
 
@@ -326,3 +327,74 @@ void delete_message(struct message_state **state)
 	*state = free_message(*state);
 }
 
+static void transition_progress(struct message_state *ms, uint64_t transition)
+{
+	ms->progress = ms->progress | transition;
+}
+
+// Check if all events for the message have been received and we are ready
+// to consume it.
+static void transition_complete(struct message_state *ms, int prog_err)
+{
+	if (prog_err == CODE_SUCCESS) {
+		transition_progress(ms, MS_COMPLETE);
+	}
+}
+
+// Check if we need to transition ms progress state to MS_GC (garbage)
+static void transition_end_state(struct message_state *ms)
+{
+	ASSERT((IS_MS_COMPLETE(ms)) != 0,
+	       "transition_end_state: ms->progress not set to completed");
+
+	if (IS_MS_GC(ms)) {
+		return;
+	}
+
+	if (IS_MS_DB_SAVED(ms)) {
+		transition_progress(ms, MS_GC);
+	}
+}
+
+// Check if we can transition ms progress state to MS_DB_SAVED (saved in sqlite db)
+static void transition_db_saved(struct message_state *ms, int prog_err)
+{
+	ASSERT((IS_MS_COMPLETE(ms)) == 1,
+	       "transition_db_saved: ms->progress not set to completed");
+
+	if (prog_err == CODE_SUCCESS) {
+		transition_progress(ms, MS_DB_SAVED);
+	} else if (prog_err == CODE_FAILED) {
+		transition_progress(ms, MS_GC);
+	}
+	// if prog_err == CODE_RETRY, we do not transition to next state
+	// This is so that the engine retries with this message again
+
+	// Decide whether ms is ready for garbage collection
+	transition_end_state(ms);
+}
+
+static void transition_gc_force(struct message_state *ms)
+{
+	transition_progress(ms, MS_GC);
+}
+
+// For the given message_state struct, set the progress state to
+// transition target, if the appropriate prog_err value is given
+void transition_ms_progress(struct message_state *ms,
+			    uint64_t transition_target, int prog_err)
+{
+	switch (transition_target) {
+	case MS_COMPLETE:
+		transition_complete(ms, prog_err);
+		break;
+	case MS_DB_SAVED:
+		transition_db_saved(ms, prog_err);
+		break;
+	case MS_GC:
+		transition_gc_force(ms);
+		break;
+	default:
+		return;
+	}
+}

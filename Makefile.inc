@@ -9,9 +9,21 @@ else
 			"$(if $(3), $(3))"; 
 endif
 
+ifeq ($(DEBUG),bpf)
+	DEBUG_FLAG = -D__DEBUG_BPF__
+else ifeq ($(DEBUG),user)
+	DEBUG_FLAG = -D__DEBUG__
+else ifeq ($(DEBUG),all)
+	DEBUG_FLAG = -D__DEBUG__ -D__DEBUG_BPF__
+else
+	DEBUG_FLAG =
+endif
+
+
 KALBUR := kalbur
-DATABASE := rule_engine
+RULE_ENGINE_DIR := rule_engine
 UTIL := util
+DATABASE := database
 
 # Paths
 INC_DIR = $(abspath $(ROOT_DIR)/include)
@@ -19,7 +31,8 @@ LIB_DIR = $(abspath $(ROOT_DIR)/third_party)
 BUILD_DIR = $(abspath $(ROOT_DIR)/build)
 TOOLS_DIR = $(abspath $(ROOT_DIR)/tools)
 KALBUR_DIR = $(abspath $(ROOT_DIR)/$(KALBUR))
-DATABASE_DIR = $(KALBUR_DIR)/$(DATABASE)
+ENGINE_DIR = $(KALBUR_DIR)/$(RULE_ENGINE_DIR)
+DATABASE_DIR = $(ENGINE_DIR)/$(DATABASE)
 UTIL_DIR = $(KALBUR_DIR)/$(UTIL)
 
 # Libraries
@@ -55,5 +68,5 @@ AIRBUS_SEC_FLAGS := 	-O2 							\
 			-Wl,-z,noexecstack -Wl,-z,separate-code
 
 
-INCLUDES := -I$(INC_DIR) -I$(ROOT_DIR) -I$(KALBUR_DIR) -I$(DATABASE_DIR) -I$(UTIL_DIR) -I$(UAPI)
+INCLUDES := -I$(INC_DIR) -I$(ROOT_DIR) -I$(KALBUR_DIR) -I$(DATABASE_DIR) -I$(UTIL_DIR) -I$(UAPI) -I$(ENGINE_DIR)
 CFLAGS ?= $(IMPL_CFLAGS) $(AIRBUS_SEC_FLAGS)

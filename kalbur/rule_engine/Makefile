@@ -3,28 +3,26 @@ ROOT_DIR := ../..
 include $(ROOT_DIR)/Makefile.inc
 
 DATABASE := database
-RULES := rules
-NOTIFIER := notifier
-HEADER_DEPENDENCIES := stmts.h schema.h helper_defs.h
+ENGINE := engine
+SAVE_MS := save_ms
 
-all: $(DATABASE).o $(RULES).o $(NOTIFIER).o
+all: $(DATABASE) $(ENGINE).o $(SAVE_MS).o
 
-INC := $(INCLUDES)
+$(DATABASE):
+	$(call msg,DATABASE,$@)
+	$(Q)$(MAKE) -C $(DATABASE_DIR) all
 
-$(NOTIFIER).o: $(NOTIFIER).c $(NOTIFIER).h
-	$(call msg,CC,$@)
-	$(Q)$(CC) $(CFLAGS) $(INCLUDES) -c $(NOTIFIER).c -o $@
+$(ENGINE).o: $(ENGINE).c $(ENGINE).h
+	$(call msg,ENGINE,$@)
+	$(Q)$(CC) -DAPPLY_ASSERT $(DEBUG_FLAG) $(CFLAGS) $(INCLUDES) -c $(ENGINE).c -o $@
 
-$(RULES).o: $(RULES).c $(RULES).h
-	$(call msg,CC,$@)
-	$(Q)$(CC) $(CFLAGS) $(INC) -c $(RULES).c -o $@
-
-$(DATABASE).o: $(DATABASE).c $(DATABASE).h $(HEADER_DEPENDENCIES)
-	$(call msg,CC,$@)
-	$(Q)$(CC) $(CFLAGS) $(INCLUDES) -c $(DATABASE).c -o $@
-
-.PHONY: clean
+$(SAVE_MS).o: $(SAVE_MS).c $(SAVE_MS).h
+	$(call msg,SAVE_MS,$@)
+	$(Q)$(CC) -DAPPLY_ASSERT $(DEBUG_FLAG) $(CFLAGS) $(INCLUDES) -c $(SAVE_MS).c -o $@
 
 clean:
+	$(call, msg,CLEAN)
+	$(Q)$(MAKE) -C $(DATABASE_DIR) clean
 	$(Q)rm -f *.o
 
+.PHONY: all clean $(DATABASE)

@@ -54,6 +54,8 @@
 
 /* include/uapi/linux/sched.h */
 #define CLONE_PARENT_SETTID 0x00100000 /* set the TID in the parent */
+#define CLONE_PARENT                                                           \
+	0x00008000 /* set if we want to have the same parent as the cloner */
 
 /* include/linux/stringify */
 #pragma GCC diagnostic push
