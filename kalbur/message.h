@@ -26,6 +26,8 @@ struct message_state;
 #define MESSAGE_STRING_SZ(ms)                                                  \
 	(GET_STRUCT_FIELD(ms, struct message_state, str_data).str_size)
 
+#define PTR_TO_STRING_DATA(ms, off) (&(((char *)MESSAGE_STRING(ms))[off]))
+
 #define MESSAGE_MMAP(ms)                                                       \
 	(GET_STRUCT_FIELD(ms, struct message_state, mmap_data).mmap)
 
@@ -68,7 +70,7 @@ struct mmap_dump_fmt {
 		else if (syscall == SYS_SOCKET)                                \
 			copy = sizeof(struct socket_create);                   \
 		else if (IS_FORK_OR_FRIENDS(syscall))                          \
-			copy = sizeof(struct child_proc_info);                 \
+			copy = sizeof(struct process_info);                    \
 		else if (syscall == LPE_COMMIT_CREDS)                          \
 			copy = sizeof(struct cfg_integrity);                   \
 		else if (syscall == SYS_PTRACE)                                \
@@ -77,16 +79,22 @@ struct mmap_dump_fmt {
 			copy = sizeof(struct kernel_module_load_info);         \
 		else if (syscall == MODPROBE_OVERWRITE)                        \
 			copy = sizeof(struct modprobe_overwrite);              \
+		else if (syscall == EXIT_EVENT)                                \
+			copy = sizeof(struct exit_event);                      \
 		else                                                           \
 			ASSERT(0 == 1,                                         \
 			       "SYSCALL_PRIMARY_STRUCT: Invalid syscall");     \
 	} while (0)
 
-#define FREEABLE(ms) ((ms->saved == 1) || (ms->discard == 1))
+typedef int (*message_complete_predicate)(struct message_state *);
 
-#define TO_GC(ms) ((ms != NULL) && (FREEABLE(ms)))
+#define MS_COMPLETE (1UL << 0)
+#define MS_DB_SAVED (1UL << 2)
+#define MS_GC (1UL << 3)
 
-typedef bool (*message_complete_predicate)(struct message_state *);
+#define IS_MS_COMPLETE(ms) (((ms->progress) & (MS_COMPLETE)) != 0)
+#define IS_MS_DB_SAVED(ms) (((ms->progress) & (MS_DB_SAVED)) != 0)
+#define IS_MS_GC(ms) (((ms->progress) & (MS_GC)) != 0)
 
 struct message_state {
 	pthread_mutex_t message_state_lock;
@@ -103,12 +111,8 @@ struct message_state {
 	struct message_state *next_msg;
 	struct message_state
 		*prev_msg; // Needed inorder to link and unlink new messages
-	struct message_state
-		*next_gc; // Optimization to quickly find struct to free
 	int cpu;
-	int complete;
-	int saved;
-	int discard;
+	uint64_t progress;
 };
 
 int construct_message_state(struct message_state *ms,
@@ -118,5 +122,7 @@ int is_legal_event(struct probe_event_header *eh);
 struct message_state *allocate_message_struct(int syscall, int cpu);
 struct probe_event_header *get_event_header(struct message_state *ms);
 void delete_message(struct message_state **ms);
+void transition_ms_progress(struct message_state *ms,
+			    uint64_t transition_target, int prog_err);
 
 #endif // MESSAGE_H

@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <err.h>
 #include <check.h>
+#include <helpers.h>
 #include <database.h>
 #include <notifier.h>
 #include <stdlib.h>

@@ -1,2 +1,3 @@
 check_database
 check_message
+*.swp

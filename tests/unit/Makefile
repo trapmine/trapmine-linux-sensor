@@ -3,12 +3,13 @@ ROOT_DIR := ../..
 include $(ROOT_DIR)/Makefile.inc
 
 HASH := $(UTIL_DIR)/hash.o $(UTIL_DIR)/hash.h $(UTIL_DIR)/util.h
+HELPERS_FN := $(UTIL_DIR)/helpers.o $(UTIL_DIR)/helpers.h
 SQLITE3 := $(INC_DIR)/sqlite3.o
 DB := $(DATABASE_DIR)/database.o
 NOTIFIER := $(DATABASE_DIR)/notifier.o
 RULES := $(DATABASE_DIR)/rules.o
 CHECK_FLAGS := -pthread -I/usr/local/include -L/usr/local/lib -lcheck
-DEPENDENCIES := $(HASH) $(DB) $(SQLITE3) $(NOTIFIER) $(RULES)
+DEPENDENCIES := $(HASH) $(DB) $(SQLITE3) $(NOTIFIER) $(RULES) $(HELPERS_FN)
 
 TESTS := check_message check_database
 all: $(TESTS)

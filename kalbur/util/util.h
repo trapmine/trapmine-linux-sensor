@@ -8,6 +8,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <pthread.h>
 
 #define MAX_HASH_ENTRIES 200
 
@@ -23,5 +24,10 @@ struct entry {
 };
 
 typedef struct entry *hashtable_t;
+
+typedef struct {
+	hashtable_t *ht;
+	pthread_mutex_t lock;
+} safetable_t;
 
 #endif // UTIL_H

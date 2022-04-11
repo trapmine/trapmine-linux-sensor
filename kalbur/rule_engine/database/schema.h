@@ -91,61 +91,50 @@
 #define STDOUT_TYPE "stdout_type"
 #define STDERR_INODE "stderr_inode"
 #define STDERR_TYPE "stderr_type"
+#define ENV "environment"
+#define CLONE_FLAGS "clone_flags"
 
 #define PROCESS_INFO_TABLE                                                     \
-	"CREATE TABLE process_info( 			 	\
-				" EVENT_ID                                     \
-	" INTEGER PRIMARY KEY, 			\
-				" PPID                                         \
-	"	UINT64_T,					\
-				" FILE_ID                                      \
-	" INTEGER NOT NULL, 				\
-				" ARGS                                         \
+	"CREATE TABLE process_info(						\
+		" EVENT_ID                                                     \
+	" INTEGER PRIMARY KEY, 				\
+		" PPID                                                         \
+	" UINT64_T,						\
+		" CLONE_FLAGS                                                  \
+	" UINT64_T, 					\
+		" FILE_ID                                                      \
+	" INTEGER NOT NULL, 					\
+		" ARGS                                                         \
+	" TEXT, 							\
+		" ENV                                                          \
+	" TEXT, 							\
+		" INTERPRETER                                                  \
 	" TEXT, 						\
-				" INTERPRETER                                  \
-	" TEXT, 					\
-				" UID                                          \
+		" UID                                                          \
 	" INTEGER, 						\
-				" GID                                          \
+		" GID                                                          \
 	" INTEGER, 						\
-				" EUID                                         \
-	" INTEGER, 					\
-				" EGID                                         \
-	" INTEGER, 					\
-				" STDIN_INODE                                  \
+		" EUID                                                         \
+	" INTEGER, 						\
+		" EGID                                                         \
+	" INTEGER, 						\
+		" STDIN_INODE                                                  \
 	" INTEGER,					\
-				" STDIN_TYPE                                   \
+		" STDIN_TYPE                                                   \
+	" INTEGER,						\
+		" STDOUT_INODE                                                 \
 	" INTEGER,					\
-				" STDOUT_INODE                                 \
+		" STDOUT_TYPE                                                  \
 	" INTEGER,					\
-				" STDOUT_TYPE                                  \
+		" STDERR_INODE                                                 \
 	" INTEGER,					\
-				" STDERR_INODE                                 \
+		" STDERR_TYPE                                                  \
 	" INTEGER,					\
-				" STDERR_TYPE                                  \
-	" INTEGER,					\
-				FOREIGN KEY(" EVENT_ID                         \
-	") REFERENCES events(" EVENT_ID "), 	\
-				FOREIGN KEY(" FILE_ID                          \
-	") REFERENCES file_info(" FILE_ID ")	\
-			 );"
-
-/* Child Process info table */
-
-// Columns
-#define NEW_TGID_PID "new_tgid_pid"
-#define CLONE_FLAGS "clone_flags"
-#define PARENT_COMM "parent_process_name"
-
-#define CHILD_PROC_INFO_TABLE                                                  \
-	"CREATE TABLE child_proc_info(\
-				" EVENT_ID " INTEGER PRIMARY KEY, \
-				" NEW_TGID_PID " UINT64_T NOT NULL, \
-				" PPID " UINT64_T, \
-				" CLONE_FLAGS " UINT64_T NOT NULL, \
-				FOREIGN KEY(" EVENT_ID                         \
-	") REFERENCES events(" EVENT_ID ")\
-				);"
+		FOREIGN KEY(" EVENT_ID ") REFERENCES events(" EVENT_ID         \
+	"), 	\
+		FOREIGN KEY(" FILE_ID ") REFERENCES file_info(" FILE_ID        \
+	")	\
+	);"
 
 /* Socket create info table */
 #define FAMILY "family"

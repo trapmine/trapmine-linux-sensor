@@ -22,7 +22,7 @@
 #include <sys/socket.h> // AF_INET, AF_INET6
 #include <arpa/inet.h>
 #include <sys/mman.h>
-
+#include <helpers.h>
 #include "database.h"
 
 static void delete_db_file(char *dbname)
@@ -205,7 +205,7 @@ int prepare_sql(sqlite3 *db, hashtable_t *hash_table)
 
 		err = hash_put(hash_table, SQL_STMTS[i].sql, ppStmt,
 			       SQL_STMTS[i].sql_len);
-		if (err) {
+		if (err == CODE_FAILED) {
 			fprintf(stderr,
 				"Failed to place prepared statement in hashmap.\n");
 			return CODE_FAILED;
@@ -335,74 +335,15 @@ static int select_file_info_row(sqlite3 *db, hashtable_t *ht,
 	return file_id;
 }
 
-static size_t calc_path_sz(char **parts, uint32_t pathlen)
-{
-	size_t sz = 0;
-
-	for (uint32_t i = 0; i < pathlen; ++i) {
-		sz += strlen(parts[i]);
-	}
-
-	// We also have pathlen-1 '/'s + trailing nullbyte + buffer space
-	return sz + (pathlen * 2);
-}
-
-static char *build_file_name(char *file_path, uint32_t pathlen)
-{
-	char **parts;
-	int marker;
-	char *filename;
-	char *dest;
-	size_t src_len, path_sz;
-
-	parts = (char **)malloc(pathlen * sizeof(char *));
-	if (parts == NULL)
-		goto out;
-
-	marker = 0;
-	for (int i = (int)pathlen - 1; i >= 0; i--) {
-		parts[i] = (char *)&file_path[marker];
-		while (file_path[marker] != 0)
-			marker++;
-
-		marker++;
-	}
-
-	path_sz = calc_path_sz(parts, pathlen);
-
-	filename = (char *)calloc(sizeof(char), path_sz);
-	if (filename == NULL) {
-		fprintf(stderr, "build_file_name: malloc failed\n");
-		goto out;
-	}
-
-	dest = filename;
-	if (pathlen > 1) {
-		*dest = '/';
-		dest++;
-	}
-	for (uint32_t i = 0; i < pathlen; ++i) {
-		src_len = strlen(parts[i]);
-		dest = memcpy(dest, parts[i], src_len);
-		dest = dest + src_len;
-		*dest = '/';
-		dest++;
-	}
-	dest = dest - sizeof(char);
-	*dest = 0;
-
-out:
-	if (parts != NULL)
-		free(parts);
-	return filename;
-}
-
 int insert_file_info(sqlite3 *db, hashtable_t *ht, char *string_data,
 		     struct file_info *f)
 {
 	int file_id, err;
 	sqlite3_stmt *ppStmt;
 	char *filename = NULL;
+
+	if (f->i_ino == 0)
+		return CODE_FAILED;
 
 	// If file information already exists in database return its ID.
 	file_id = select_file_info_row(db, ht, f->i_ino, f->s_magic);
@@ -422,10 +363,8 @@ int insert_file_info(sqlite3 *db, hashtable_t *ht, char *string_data,
 	SQLITE3_BIND_INT("insert_file_info", int64, S_MAGIC, f->s_magic);
 
 	if (f->file_offset < LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE)) {
-		ASSERT(string_data[LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE)] == 0,
-		       "string_data[LAST_NULL_BYTE] != 0");
-		filename = build_file_name(&string_data[f->file_offset],
-					   f->path_len);
+		filename = build_filename_from_event(
+			&string_data[f->file_offset], f->path_len);
 		if (filename != NULL) {
 			SQLITE3_BIND_STR("insert_file_info", text, FILENAME,
 					 filename);
@@ -506,43 +445,6 @@ int insert_mmap_info(sqlite3 *db, hashtable_t *ht, struct proc_mmap *pm,
 //	return event_id;
 //}
 
-static char *build_args_str(char *args_data, uint32_t argv_off, uint32_t nargv)
-{
-	uint32_t cnt, indx;
-	size_t arg_sz;
-	char *args = NULL;
-	char *dest = NULL;
-	char *str = NULL;
-
-	for (indx = argv_off, cnt = 0; cnt < nargv; indx++) {
-		if (indx >= PER_CPU_STR_BUFFSIZE) {
-			ASSERT(indx < PER_CPU_STR_BUFFSIZE,
-			       "build_args_str: indx >= PER_CPU_STR_BUFFSIZE");
-			return NULL;
-		}
-		if (args_data[indx] == 0)
-			cnt++;
-	}
-
-	arg_sz = indx - argv_off;
-	args = calloc(arg_sz, sizeof(char));
-	if (args != NULL) {
-		dest = args;
-		str = &(args_data[argv_off]);
-		for (uint32_t i = 0; i < nargv; ++i) {
-			args = strcat(args, str);
-			dest = strchr(args, '\0');
-			*dest = ',';
-			str = strchr(str, '\0');
-			str++;
-		}
-
-		return args;
-	} else {
-		return NULL;
-	}
-}
-
 int insert_proc_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 		     int event_id, int file_id)
 {
@@ -553,7 +455,8 @@ int insert_proc_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 	struct process_info *pinfo = NULL;
 	char *string_data = NULL;
 	char *args = NULL;
-	uint32_t argv_off;
+	char *env = NULL;
+	uint32_t argv_off, env_off;
 
 	ppStmt = hash_get(ht, INSERT_PROCESS_INFO, sizeof(INSERT_PROCESS_INFO));
 	if (ppStmt == NULL) {
@@ -580,6 +483,16 @@ int insert_proc_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 	SQLITE3_BIND_INT("insert_proc_info", int, EGID,
 			 pinfo->credentials.egid);
 
+	/* save clone_flags if fork/clone */
+	if (IS_FORK_OR_FRIENDS(pinfo->eh.syscall_nr)) {
+		SQLITE3_BIND_INT("insert_proc_info", int64, CLONE_FLAGS,
+				 pinfo->clone_flags);
+	} else {
+		sqlite3_bind_null(ppStmt,
+				  sqlite3_bind_parameter_index(
+					  ppStmt, PARAM_HOLDER(CLONE_FLAGS)));
+	}
+
 	/* save interpreter string */
 	if (pinfo->interp_str_offset == LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE))
 		sqlite3_bind_null(ppStmt,
@@ -589,20 +502,40 @@ int insert_proc_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 		SQLITE3_BIND_STR("insert_proc_info", text, INTERPRETER,
 				 &(string_data[pinfo->interp_str_offset]));
 
+	/* save arguments */
 	argv_off = pinfo->args.argv_offset;
 	ASSERT(argv_off < PER_CPU_STR_BUFFSIZE,
 	       "insert_proc_info: argv_off >= PER_CPU_STR_BUFFSIZE");
-	if (argv_off == LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE)) {
+	if ((pinfo->args.present == 0) ||
+	    argv_off == LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE)) {
 		sqlite3_bind_null(ppStmt, sqlite3_bind_parameter_index(
 						  ppStmt, PARAM_HOLDER(ARGS)));
 	} else {
-		args = build_args_str(string_data, argv_off, pinfo->args.nargv);
+		args = build_cmdline(string_data, argv_off, pinfo->args.nbytes);
 		if (args != NULL)
 			SQLITE3_BIND_STR("insert_proc_info", text, ARGS, args);
 		else
 			sqlite3_bind_null(ppStmt,
 					  sqlite3_bind_parameter_index(
 						  ppStmt, PARAM_HOLDER(ARGS)));
+	}
+
+	/* save environment variables */
+	env_off = pinfo->env.env_offset;
+	ASSERT(env_off < PER_CPU_STR_BUFFSIZE,
+	       "insert_proc_info: env_off >= PER_CPU_STR_BUFFSIZE");
+	if ((pinfo->env.present == 0) ||
+	    (env_off == LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE))) {
+		sqlite3_bind_null(ppStmt, sqlite3_bind_parameter_index(
+						  ppStmt, PARAM_HOLDER(ENV)));
+	} else {
+		env = build_env(string_data, env_off, pinfo->env.nbytes);
+		if (env != NULL)
+			SQLITE3_BIND_STR("insert_proc_info", text, ENV, env);
+		else
+			sqlite3_bind_null(ppStmt,
+					  sqlite3_bind_parameter_index(
+						  ppStmt, PARAM_HOLDER(ENV)));
 	}
 
 	/* Save standard input, output, err if sockets */
@@ -779,40 +712,40 @@ int insert_tcp_conn_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 	return err;
 }
 
-int insert_fork_and_friends_event(sqlite3 *db, hashtable_t *ht,
-				  struct message_state *ms, int event_id)
-{
-	sqlite3_stmt *ppStmt;
-	struct child_proc_info *cpi;
-	int err;
-
-	ppStmt = (sqlite3_stmt *)hash_get(ht, INSERT_FORK_AND_FRIENDS_INFO,
-					  sizeof(INSERT_FORK_AND_FRIENDS_INFO));
-	if (ppStmt == NULL) {
-		fprintf(stderr,
-			"insert_fork_and_friends_event: Failed to acquire prepared statement from hashmap.\n");
-		return CODE_FAILED;
-	}
-
-	cpi = (struct child_proc_info *)ms->primary_data;
-
-	SQLITE3_BIND_INT("insert_fork_and_friends_event", int, EVENT_ID,
-			 event_id);
-	SQLITE3_BIND_INT("insert_fork_and_friends_event", int64, NEW_TGID_PID,
-			 cpi->tgid_pid);
-	SQLITE3_BIND_INT("insert_fork_and_friends_event", int64, PPID,
-			 cpi->ppid);
-	SQLITE3_BIND_INT("insert_fork_and_friends_event", int64, CLONE_FLAGS,
-			 cpi->clone_flags);
-
-	err = sqlite3_step(ppStmt);
-	err = err == SQLITE_DONE ? CODE_SUCCESS : CODE_RETRY;
-
-	sqlite3_clear_bindings(ppStmt);
-	sqlite3_reset(ppStmt);
-
-	return err;
-}
+//int insert_fork_and_friends_event(sqlite3 *db, hashtable_t *ht,
+//				  struct message_state *ms, int event_id)
+//{
+//	sqlite3_stmt *ppStmt;
+//	struct child_proc_info *cpi;
+//	int err;
+//
+//	ppStmt = (sqlite3_stmt *)hash_get(ht, INSERT_FORK_AND_FRIENDS_INFO,
+//					  sizeof(INSERT_FORK_AND_FRIENDS_INFO));
+//	if (ppStmt == NULL) {
+//		fprintf(stderr,
+//			"insert_fork_and_friends_event: Failed to acquire prepared statement from hashmap.\n");
+//		return CODE_FAILED;
+//	}
+//
+//	cpi = (struct child_proc_info *)ms->primary_data;
+//
+//	SQLITE3_BIND_INT("insert_fork_and_friends_event", int, EVENT_ID,
+//			 event_id);
+//	SQLITE3_BIND_INT("insert_fork_and_friends_event", int64, NEW_TGID_PID,
+//			 cpi->tgid_pid);
+//	SQLITE3_BIND_INT("insert_fork_and_friends_event", int64, PPID,
+//			 cpi->ppid);
+//	SQLITE3_BIND_INT("insert_fork_and_friends_event", int64, CLONE_FLAGS,
+//			 cpi->clone_flags);
+//
+//	err = sqlite3_step(ppStmt);
+//	err = err == SQLITE_DONE ? CODE_SUCCESS : CODE_RETRY;
+//
+//	sqlite3_clear_bindings(ppStmt);
+//	sqlite3_reset(ppStmt);
+//
+//	return err;
+//}
 
 int insert_lpe_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 		    int event_id)

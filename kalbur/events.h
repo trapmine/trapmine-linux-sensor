@@ -31,7 +31,7 @@ typedef uint8_t u8_t;
 
 /*
  * Segment with phdrs + Segment with text section
- * + Segment with data + 3*loader + 2*misc
+ * + Segment with data + 3*loader +
  * + stack + vdso + vsyscall + vvar */
 #define MAX_MMAP_RECORDS TYPED_MACRO(12, UL)
 #define MMAP_BUFFSIZE                                                          \
@@ -45,7 +45,7 @@ typedef uint8_t u8_t;
 #define TYPED_MACRO(value, type) CALL(TYPED, value, type)
 
 //#define PER_CPU_STR_BUFFSIZE TYPED_MACRO((1 << 10), UL)
-#define PER_CPU_STR_BUFFSIZE (1 << 10)
+#define PER_CPU_STR_BUFFSIZE (1 << 12)
 #define LAST_NULL_BYTE(buffsize) ((buffsize)-1)
 
 #define PRESERVE_32_MSB(quad_word) ((quad_word >> 32) << 32)
@@ -116,13 +116,6 @@ struct proc_mmap {
 	struct file_info uf;
 };
 
-struct child_proc_info {
-	struct probe_event_header eh;
-	u64_t tgid_pid; // tgid_pid of forked process. event header contains tgid_pid of calling process.
-	u64_t ppid;
-	u64_t clone_flags;
-};
-
 struct mprotect_info {
 	struct probe_event_header eh;
 	size_t modn; // the number of vma's modified
@@ -145,16 +138,27 @@ struct stdio {
 struct process_info {
 	struct probe_event_header eh;
 	u64_t ppid;
+	u64_t clone_flags;
 	struct file_info file;
 	struct {
 		u32_t argv_offset;
-		u32_t nargv;
+		u32_t nbytes;
+		u32_t present;
 	} args;
+	struct {
+		u32_t env_offset;
+		u32_t nbytes;
+		u32_t present;
+	} env;
 	u32_t interp_str_offset;
 	struct creds credentials;
 	u32_t mmap_cnt;
 	int dump;
 	struct stdio io[3];
+};
+
+struct exit_event {
+	struct probe_event_header eh;
 };
 
 struct socket_create {
@@ -215,7 +219,6 @@ typedef union {
 
 typedef union {
 	struct process_info pinfo;
-	struct child_proc_info cpinfo;
 } proc_info_t;
 
 typedef union {

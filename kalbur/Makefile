@@ -14,12 +14,15 @@ IDIRAFTER = --include-directory-after
 SUBCLEAN = $(addsuffix .clean,$(SUPPORT))
 BPFTOOL=$(TOOLS_DIR)/bpftool
 
-SUPPORT = $(UTIL_DIR) $(DATABASE_DIR)
+SUPPORT = $(UTIL_DIR) $(ENGINE_DIR)
 HASH = $(UTIL_DIR)/hash.o
+SAFE = $(UTIL_DIR)/safe_hash.o
 SYMSEARCH = $(UTIL_DIR)/symsearch.o
+HELPERS_FN = $(UTIL_DIR)/helpers.o
 
-RULE_ENGINE = $(DATABASE_DIR)/database.o $(DATABASE_DIR)/rules.o $(DATABASE_DIR)/notifier.o
-HELPERS = $(HASH) $(RULE_ENGINE) $(SYMSEARCH)
+RULE_ENGINE = $(DATABASE_DIR)/database.o $(DATABASE_DIR)/rules.o $(DATABASE_DIR)/notifier.o $(ENGINE_DIR)/engine.o $(ENGINE_DIR)/save_ms.o 
+
+HELPERS = $(HASH) $(RULE_ENGINE) $(SYMSEARCH) $(HELPERS_FN) $(SAFE)
 SQLITE3 = $(INC_DIR)/sqlite3.o
 
 PRELIM_TARGETS = $(patsubst %.c,%.o, $(filter-out %.bpf.c, $(wildcard *.c)))
@@ -34,16 +37,6 @@ PROC_MONITOR_LINK_FLAGS = -lelf -lz -ldl -lpthread -lm
 
 CLANG_BPF_SYS_INCLUDES = $(shell $(CLANG) -v -E - < /dev/null 2>&1 \
 			 | sed -n '/<...> search starts here:/,/End of search list./{ s| \(/.*\)|-idirafter \1|p }')
-
-ifeq ($(DEBUG),bpf)
-	DEBUG_FLAG = -D__DEBUG_BPF__
-else ifeq ($(DEBUG),user)
-	DEBUG_FLAG = -D__DEBUG__
-else ifeq ($(DEBUG),all)
-	DEBUG_FLAG = -D__DEBUG__ -D__DEBUG_BPF__
-else
-	DEBUG_FLAG =
-endif
 
 ## TEMP FLAGS START. REMOVE LATER
 
