@@ -15,6 +15,7 @@
 #include <engine.h>
 #include <database.h>
 #include <hash.h>
+#include <lua_engine.h>
 
 #define ASSIGN_WITH_SOFTWARE_BARRIER(lval, rval)                               \
 	do {                                                                   \
@@ -67,10 +68,10 @@ error:
 	return CODE_FAILED;
 }
 
-static void invoke_engine(struct message_state *ms, sqlite3 *db,
-			  hashtable_t *ht)
+static void invoke_engine(struct message_state *ms, struct lua_engine *e,
+			  sqlite3 *db, hashtable_t *ht)
 {
-	process_message(ms, db, ht);
+	process_message(ms, e, db, ht);
 }
 
 static int consume_ms(struct message_state *ms)
@@ -82,21 +83,24 @@ void *consumer(void *arg)
 {
 	int err;
 	struct message_state *ms;
+	struct lua_engine *rule_engine;
 	struct thread_msg *info;
 	struct msg_list *head;
 	hashtable_t *hash_table = NULL;
 	sqlite3 *db = NULL;
 
 	info = (struct thread_msg *)arg;
+	ASSERT(info != NULL, "consumer: thread_msg* info == NULL");
 
 	err = prepare_thread_run(&hash_table, &db, info->thread_id);
 	if (err == CODE_FAILED)
 		goto error;
 
 	head = info->head;
-
-	ASSERT(info != NULL, "consumer: thread_msg* info == NULL");
 	ASSERT(head != NULL, "consumer: head == NULL");
+
+	rule_engine = (struct lua_engine *)info->rule_engine;
+	ASSERT(rule_engine != NULL, "consumer: rule_engine != NULL");
 
 	while (true) {
 		err = pthread_mutex_lock(&info->mtx);
@@ -121,7 +125,8 @@ void *consumer(void *arg)
 			if (pthread_mutex_trylock(&(ms->message_state_lock)) ==
 			    0) {
 				if (consume_ms(ms)) {
-					invoke_engine(ms, db, hash_table);
+					invoke_engine(ms, rule_engine, db,
+						      hash_table);
 				}
 				pthread_mutex_unlock(&(ms->message_state_lock));
 			}

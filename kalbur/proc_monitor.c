@@ -25,6 +25,7 @@
 #include <message_ls.h>
 #include <safe_hash.h>
 #include <stdbool.h>
+#include <lua_engine.h>
 
 #define GARBAGE_COLLECT 5000
 
@@ -244,6 +245,7 @@ static void delete_all_threads(void)
 	for (i = 0; i < thread_num; i++) {
 		pthread_mutex_destroy(&(threads[i]->mtx));
 		pthread_cond_destroy(&(threads[i]->wakeup));
+		free(threads[i]->rule_engine);
 		free(threads[i]);
 	}
 
@@ -280,14 +282,19 @@ static safetable_t *initialize_safetable(void)
 	return init_safetable();
 }
 
-static void initialize_thread_ls(struct msg_list *head)
+static int initialize_thread_ls(struct msg_list *head)
 {
+	struct lua_engine *e;
 	size_t i;
 	int err;
 
 	threads = calloc(thread_num, sizeof(struct thread_msg *));
 
 	for (i = 0; i < thread_num; i++) {
+		e = initialize_new_lua_engine();
+		if (e == NULL)
+			return CODE_FAILED;
+
 		threads[i] = calloc(1UL, sizeof(struct thread_msg));
 		if (threads[i] == NULL) {
 			fprintf(stderr,
@@ -295,6 +302,7 @@ static void initialize_thread_ls(struct msg_list *head)
 			exit(1);
 		}
 
+		threads[i]->rule_engine = e;
 		threads[i]->ready = false;
 		threads[i]->die = false;
 		threads[i]->head = head;
@@ -305,6 +313,8 @@ static void initialize_thread_ls(struct msg_list *head)
 		ASSERT(err == 0,
 		       "initialize_thread_ls: pthread_cond_init != 0");
 	}
+
+	return CODE_SUCCESS;
 }
 
 static void init_threads(void)
@@ -373,14 +383,6 @@ int main(int argc, char **argv)
 		fprintf(stderr, "Failed to initialize database file\n");
 		goto out;
 	}
-
-	/* Initialize number of threads */
-	long num = sysconf(_SC_NPROCESSORS_CONF);
-	if (num < 0) {
-		fprintf(stderr, "Failed to get number of cpus: %ld\n", num);
-	}
-	thread_num = (size_t)(num / 2) + 1;
-
 	/* initialize message list */
 	head = initialize_msg_list();
 	if (head == NULL)
@@ -391,28 +393,43 @@ int main(int argc, char **argv)
 	if (counter == NULL) {
 		fprintf(stderr,
 			"Failed to initialize hashtable for counting process events\n");
-		goto out;
+		goto del_head;
 	}
 
 	/* Initialize perf buffer callback context */
 	ctx = initialize_callback_ctx(head, counter);
+	if (ctx == NULL)
+		goto del_head;
+
+	/* Initialize number of threads */
+	long num = sysconf(_SC_NPROCESSORS_CONF);
+	if (num < 0) {
+		fprintf(stderr, "Failed to get number of cpus: %ld\n", num);
+	}
+	thread_num = (size_t)(num / 2) + 1;
 
 	/* Initialize threads */
-	initialize_thread_ls(head);
+	err = initialize_thread_ls(head);
+	if (err != CODE_SUCCESS)
+		goto del_threads;
+
 	init_threads();
 
 	err = poll_buff(bpf_map__fd(skel->maps.streamer), consume_kernel_events,
 			handle_lost_events, (void *)ctx);
 
-out:
-	if (head != NULL)
-		free(head);
-
+del_threads:
 	shutdown_threads();
+
+del_head:
 	if (head != NULL)
 		head = delete_message_list(head);
 
+	if (ctx != NULL)
+		free(ctx);
+
 	delete_all_threads();
 
+out:
 	return err < 0 ? 1 : 0;
 }

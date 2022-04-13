@@ -9,7 +9,9 @@
 #include <message.h>
 #include <hash.h>
 #include <sqlite3.h>
+#include <lua_engine.h>
 
-void process_message(struct message_state *ms, sqlite3 *db, hashtable_t *ht);
+void process_message(struct message_state *ms, struct lua_engine *e,
+		     sqlite3 *db, hashtable_t *ht);
 
 #endif // ENGINE_H
