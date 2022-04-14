@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <err.h>
+#include <arpa/inet.h>
+#include <sys/socket.h> // AF_INET, AF_INET6
 #include "helpers.h"
 
 static size_t calc_path_sz(char **parts, uint32_t pathlen)
@@ -116,3 +118,34 @@ out:
 	return filename;
 }
 
+#define IPV4 "ipv4"
+#define IPV6 "ipv6"
+char *socket_family_str(int family)
+{
+	switch (family) {
+	case AF_INET:
+		return IPV4;
+	case AF_INET6:
+		return IPV6;
+	default:
+		return NULL;
+	}
+}
+
+#define TYPE_STREAM "sock_stream"
+#define TYPE_DGRAM "sock_dgram"
+#define TYPE_RAW "sock_raw"
+#define TYPE_UNDEF "undef"
+char *socket_type_str(int type)
+{
+	switch (type) {
+	case SOCK_STREAM:
+		return TYPE_STREAM;
+	case SOCK_DGRAM:
+		return TYPE_DGRAM;
+	case SOCK_RAW:
+		return TYPE_RAW;
+	default:
+		return TYPE_UNDEF;
+	}
+}
