@@ -47,7 +47,7 @@ void process_message(struct message_state *ms, struct lua_engine *rule_engine,
 	}
 
 	if (should_process_rules(ms)) {
-		err = process_rule(rule_engine);
+		err = process_rule(rule_engine, ms);
 		transition_ms_progress(ms, MS_RULES_PROCESSED, err);
 	}
 }

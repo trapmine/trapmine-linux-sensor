@@ -3,15 +3,27 @@
 #include <lauxlib.h>
 #include <stdlib.h>
 #include <err.h>
+#include <lua_event.h>
+#include <syscall_defs.h>
+#include <message.h>
+#include <events.h>
 
 static void test_rule(lua_State *l)
 {
-	char *code = "print('Hello, from inside lua')";
+	char *code = " \
+		sys = Event.syscall			\
+		if sys == -4 then			\
+			print('Exit Event')		\
+			print(Event.tgidPid)		\
+			print(Event.eventTime) 		\
+			print(Event.processName)	\
+			print(Event.syscall)		\
+		end					\
+		";
 
-	if (luaL_loadstring(l, code) == LUA_OK) {
-		if (lua_pcall(l, 0, 0, 0) == LUA_OK) {
-			lua_pop(l, lua_gettop(l));
-		}
+	int res = luaL_dostring(l, code);
+	if (res != LUA_OK) {
+		printf("Error: %s\n", lua_tostring(l, -1));
 	}
 
 	return;
@@ -21,10 +33,13 @@ int process_rule(struct lua_engine *e, struct message_state *ms)
 {
 	struct probe_event_header *eh;
 
-	ASSERT(ms != NULL, "process_rule: ms == NULL");
-	eh = (struct probe_event_header *)ms->primary_data;
+	eh = ms->primary_data;
 
-	test_rule(e->L);
+	if (IS_EXIT_EVENT(eh->syscall_nr)) {
+		setup_event_context(e->L, ms);
+
+		test_rule(e->L);
+	}
 
 	return CODE_SUCCESS;
 }
@@ -41,16 +56,16 @@ static void initialize_state(lua_State *l)
 	luaopen_utf8(l);
 	luaopen_table(l);
 	luaopen_math(l);
-	//	luaopen_trapmine(l);
 }
 
 struct lua_engine *initialize_new_lua_engine(void)
 {
+	int err;
 	struct lua_engine *e;
 
 	e = calloc(1UL, sizeof(struct lua_engine));
 	if (e == NULL)
-		goto out;
+		return NULL;
 
 	e->L = new_state();
 	if (e->L == NULL)
@@ -58,9 +73,12 @@ struct lua_engine *initialize_new_lua_engine(void)
 
 	initialize_state(e->L);
 
+	err = init_event_context(e->L);
+	if (err != CODE_SUCCESS)
+		goto error;
+
 	// load file and dump
 
-out:
 	return e;
 error:
 	free(e);
