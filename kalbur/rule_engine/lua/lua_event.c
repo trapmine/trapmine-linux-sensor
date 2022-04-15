@@ -104,8 +104,7 @@ int init_event_context(lua_State *L)
 	// userdata should now be at the top. Make sure.
 	ASSERT(lua_isuserdata(L, -1), "");
 
-	// expose the userdata as a global value to the lua
-	// script
+	// expose the userdata as a global value to the lua script
 	lua_setglobal(L, EVENT_GLOBAL);
 
 	return CODE_SUCCESS;

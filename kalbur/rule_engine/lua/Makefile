@@ -5,8 +5,9 @@ include $(ROOT_DIR)/Makefile.inc
 ENGINE := lua_engine
 EVENT := lua_event
 ATTR_HANDLER := attr_handler
+MANAGER := rule_manager
 
-all: $(ENGINE).o $(EVENT).o $(ATTR_HANDLER).o
+all: $(ENGINE).o $(EVENT).o $(ATTR_HANDLER).o $(MANAGER).o
 
 $(ENGINE).o: $(ENGINE).c $(ENGINE).h
 	$(call msg,LUA_ENGINE,$@)
@@ -19,6 +20,10 @@ $(EVENT).o: $(EVENT).c $(EVENT).h
 $(ATTR_HANDLER).o: $(ATTR_HANDLER).c $(ATTR_HANDLER).h
 	$(call msg,ATTR_HANDLER,$@)
 	$(Q)$(CC) -DAPPLY_ASSERT $(DEBUG_FLAG) $(INCLUDES) -c $(ATTR_HANDLER).c -o $@
+
+$(MANAGER).o: $(MANAGER).c $(MANAGER).h
+	$(call msg,RULE_MANAGER,$@)
+	$(Q)$(CC) -DAPPLY_ASSERT $(DEBUG_FLAG) $(INCLUDES) -c $(MANAGER).c -o $@
 
 clean:
 	$(call msg,CLEAN)
