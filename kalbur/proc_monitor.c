@@ -317,7 +317,7 @@ static int initialize_thread_ls(struct msg_list *head)
 	return CODE_SUCCESS;
 }
 
-static void init_threads(void)
+static int startup_workers(void)
 {
 	size_t i;
 	int err;
@@ -326,10 +326,14 @@ static void init_threads(void)
 		err = pthread_create(&(threads[i]->thread_id), NULL, &consumer,
 				     threads[i]);
 		if (err != 0) {
-			fprintf(stderr, "Failed to create pthread\n");
-			exit(1);
+			fprintf(stderr,
+				"startup_workers: Failed to create pthread: %d\n",
+				err);
+			return CODE_FAILED;
 		}
 	}
+
+	return CODE_SUCCESS;
 }
 
 static struct callback_ctx *initialize_callback_ctx(struct msg_list *head,
@@ -352,7 +356,7 @@ int main(int argc, char **argv)
 	struct msg_list *head = NULL;
 	struct rlimit limit = { 0 };
 	safetable_t *counter;
-	struct callback_ctx *ctx;
+	struct callback_ctx *ctx = NULL;
 	int err;
 
 	/* Kill this process if parent dies */
@@ -411,15 +415,18 @@ int main(int argc, char **argv)
 	/* Initialize threads */
 	err = initialize_thread_ls(head);
 	if (err != CODE_SUCCESS)
-		goto del_threads;
+		goto del_head;
 
-	init_threads();
+	err = startup_workers();
+	if (err != CODE_SUCCESS)
+		goto del_threads;
 
 	err = poll_buff(bpf_map__fd(skel->maps.streamer), consume_kernel_events,
 			handle_lost_events, (void *)ctx);
 
 del_threads:
 	shutdown_threads();
+	delete_all_threads();
 
 del_head:
 	if (head != NULL)
@@ -427,8 +434,6 @@ del_head:
 
 	if (ctx != NULL)
 		free(ctx);
-
-	delete_all_threads();
 
 out:
 	return err < 0 ? 1 : 0;
