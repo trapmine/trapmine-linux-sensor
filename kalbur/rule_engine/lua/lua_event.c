@@ -4,8 +4,6 @@
 #include "lua_event.h"
 #include "attr_handler.h"
 
-#define EVENT_GLOBAL "Event"
-
 // This is a function of the type lua_CFunction. It is called by lua.
 // This function is called whenever the global 'Event' userdata
 // is indexed, i.e, if an attribute is accessed like Event.tgidPid
@@ -60,7 +58,22 @@ void setup_event_context(lua_State *L, struct message_state *ms)
 	       "setup_event_context: global_lua_event->push_attr == NULL");
 
 	global_lua_event->ms_event = ms->primary_data;
+	global_lua_event->ms = ms;
 
+	return;
+}
+
+void teardown_event_context(lua_State *L)
+{
+	ASSERT(L != NULL, "teardown_event_context: L == NULL");
+
+	lua_getglobal(L, EVENT_GLOBAL);
+	struct lua_event *global_lua_event =
+		(struct lua_event *)lua_touserdata(L, -1);
+	ASSERT(global_lua_event != NULL,
+	       "teardown_event_context: global_lua_event == NULL");
+
+	__builtin_memset(global_lua_event, 0, sizeof(struct lua_event));
 	return;
 }
 

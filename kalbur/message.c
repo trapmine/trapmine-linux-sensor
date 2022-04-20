@@ -327,6 +327,16 @@ void delete_message(struct message_state **state)
 	*state = free_message(*state);
 }
 
+void set_ms_event_id(struct message_state *ms, int event_id)
+{
+	ms->event_id = event_id;
+}
+
+void tag_ms(struct message_state *ms, unsigned long tag)
+{
+	ms->action |= tag;
+}
+
 static void transition_progress(struct message_state *ms, uint64_t transition)
 {
 	ms->progress = ms->progress | transition;

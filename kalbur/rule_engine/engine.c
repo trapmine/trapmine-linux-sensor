@@ -10,6 +10,8 @@
 #include <save_ms.h>
 #include <err.h>
 
+#include <stdio.h>
+
 static bool should_save_db(struct message_state *ms)
 {
 	if (!(IS_MS_DB_SAVED(ms))) {
@@ -36,18 +38,27 @@ static bool should_process_rules(struct message_state *ms)
 	return false;
 }
 
-void process_message(struct message_state *ms, struct lua_engine *rule_engine,
-		     sqlite3 *db, hashtable_t *sqlite_stmts)
+void process_message(struct message_state *ms, struct engine *e)
 {
 	int err;
 
+	ASSERT(e != NULL, "process_message: e == NULL");
+
 	if (should_save_db(ms)) {
-		err = save_msg(db, sqlite_stmts, ms);
+		err = save_msg(e->db, e->sqlite_stmts, ms);
 		transition_ms_progress(ms, MS_DB_SAVED, err);
 	}
 
 	if (should_process_rules(ms)) {
-		err = process_rule(rule_engine, ms);
+		ASSERT(ms->event_id, "process_message: ms->event_id == 0");
+		err = apply_rules(e->le, ms);
 		transition_ms_progress(ms, MS_RULES_PROCESSED, err);
 	}
+
+#ifdef __DEBUG__
+	struct probe_event_header *eh = ms->primary_data;
+	if (IS_EXIT_EVENT(eh->syscall_nr)) {
+		printf("action tag: %lu\n", ms->action);
+	}
+#endif
 }

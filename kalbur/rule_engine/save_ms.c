@@ -92,6 +92,8 @@ MESSAGE_HANDLER_FUNC(save_mmap_event)
 
 	HANDLE_FAIL_JUMP(err);
 
+	set_ms_event_id(ms, event_id);
+
 	return err;
 
 out:
@@ -153,6 +155,8 @@ MESSAGE_HANDLER_FUNC(save_execve_event)
 		goto out;
 	}
 
+	set_ms_event_id(ms, event_id);
+
 	return err;
 
 out:
@@ -200,6 +204,8 @@ MESSAGE_HANDLER_FUNC(save_fork_and_friends_event)
 
 	HANDLE_FAIL_JUMP(err);
 
+	set_ms_event_id(ms, event_id);
+
 	return err;
 
 out:
@@ -240,6 +246,8 @@ MESSAGE_HANDLER_FUNC(save_socket_create_event)
 
 	HANDLE_FAIL_JUMP(err);
 
+	set_ms_event_id(ms, event_id);
+
 	return err;
 out:
 	rollback_err = rollback_transaction(db, ht);
@@ -274,6 +282,8 @@ MESSAGE_HANDLER_FUNC(save_tcp_connection_event)
 			sqlite3_errmsg(db));
 
 	HANDLE_FAIL_JUMP(err);
+
+	set_ms_event_id(ms, event_id);
 
 	return err;
 out:
@@ -390,6 +400,8 @@ MESSAGE_HANDLER_FUNC(save_ptrace_event)
 
 	HANDLE_FAIL_JUMP(err);
 
+	set_ms_event_id(ms, event_id);
+
 	return err;
 
 out:
@@ -435,6 +447,8 @@ MESSAGE_HANDLER_FUNC(save_kernel_module_load_info)
 
 	HANDLE_FAIL_JUMP(err);
 
+	set_ms_event_id(ms, event_id);
+
 	return err;
 
 out:
@@ -447,6 +461,7 @@ out:
 
 MESSAGE_HANDLER_FUNC(save_exit_event)
 {
+	ms->event_id = 10;
 	return CODE_SUCCESS;
 }
 

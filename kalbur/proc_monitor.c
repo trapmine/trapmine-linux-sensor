@@ -282,7 +282,8 @@ static safetable_t *initialize_safetable(void)
 	return init_safetable();
 }
 
-static int initialize_thread_ls(struct msg_list *head)
+static int initialize_thread_ls(struct msg_list *head,
+				struct rules_manager *manager)
 {
 	struct lua_engine *e;
 	size_t i;
@@ -291,7 +292,7 @@ static int initialize_thread_ls(struct msg_list *head)
 	threads = calloc(thread_num, sizeof(struct thread_msg *));
 
 	for (i = 0; i < thread_num; i++) {
-		e = initialize_new_lua_engine();
+		e = initialize_new_lua_engine(manager);
 		if (e == NULL)
 			return CODE_FAILED;
 
@@ -412,8 +413,15 @@ int main(int argc, char **argv)
 	}
 	thread_num = (size_t)(num / 2) + 1;
 
+	/* TEMPORARY */
+#define RULES_FILE "/opt/trapmine/rules/config.lua"
+	struct rules_manager *manager = init_rules_manager(RULES_FILE);
+	if (manager == NULL)
+		goto del_head;
+	/* */
+
 	/* Initialize threads */
-	err = initialize_thread_ls(head);
+	err = initialize_thread_ls(head, manager);
 	if (err != CODE_SUCCESS)
 		goto del_head;
 

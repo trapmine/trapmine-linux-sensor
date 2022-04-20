@@ -11,7 +11,12 @@
 #include <sqlite3.h>
 #include <lua_engine.h>
 
-void process_message(struct message_state *ms, struct lua_engine *e,
-		     sqlite3 *db, hashtable_t *ht);
+struct engine {
+	struct lua_engine *le;
+	sqlite3 *db;
+	hashtable_t *sqlite_stmts;
+};
+
+void process_message(struct message_state *ms, struct engine *e);
 
 #endif // ENGINE_H

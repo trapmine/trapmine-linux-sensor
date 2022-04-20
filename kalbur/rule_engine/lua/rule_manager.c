@@ -9,16 +9,17 @@
 #include <lauxlib.h>
 #include <stdlib.h>
 #include <err.h>
+#include <syscall_defs.h>
 #include "rule_manager.h"
 
 #define LUA_EXT ".lua"
-#define RULES_DIR "/opt/trapmine/rules"
 
-static int load_lua_chunk(lua_State *L, char *script, struct stat *statbuff)
+static int load_lua_chunk(lua_State *L, char *script, ssize_t file_sz)
 {
 	ASSERT(script != NULL, "load_lua: script == NULL");
 	char *script_data;
 	int fd, err;
+	ssize_t rerr;
 	unsigned long buff_sz;
 
 	fd = open(script, O_RDONLY);
@@ -29,7 +30,7 @@ static int load_lua_chunk(lua_State *L, char *script, struct stat *statbuff)
 		return CODE_FAILED;
 	}
 
-	buff_sz = statbuff->st_size * sizeof(char);
+	buff_sz = (unsigned long)file_sz * sizeof(char);
 	script_data = (char *)malloc(buff_sz);
 	if (script_data == NULL) {
 		fprintf(stderr,
@@ -37,18 +38,20 @@ static int load_lua_chunk(lua_State *L, char *script, struct stat *statbuff)
 		return CODE_FAILED;
 	}
 
-	err = read(fd, script_data, buff_sz);
-	if (err == -1) {
+	rerr = read(fd, script_data, buff_sz);
+	if (rerr == -1) {
 		fprintf(stderr,
 			"load_lua_chunk: Failed to read file %s: %d: %s\n",
 			script, errno, strerror(errno));
-		return CODE_FAILED;
+		err = CODE_FAILED;
+		goto out;
 	}
-	if (err < statbuff->st_size) {
+	if (rerr < file_sz) {
 		fprintf(stderr,
 			"load_lua_chunk: Failed to read all bytes: %ld. Bytes read: %d\n",
-			statbuff->st_size, err);
-		return CODE_FAILED;
+			file_sz, err);
+		err = CODE_FAILED;
+		goto out;
 	}
 
 	err = luaL_loadbuffer(L, script_data, buff_sz, script);
@@ -59,10 +62,14 @@ static int load_lua_chunk(lua_State *L, char *script, struct stat *statbuff)
 			"load_lua_chunk: Failed to load lua chunk: %d: %s\n",
 			err, errstr);
 
-		return CODE_FAILED;
+		err = CODE_FAILED;
+		goto out;
 	}
 
-	return CODE_SUCCESS;
+	err = CODE_SUCCESS;
+out:
+	free(script_data);
+	return err;
 }
 
 #define PTR_ARITHMETIC(ptr, ptr_type_cast, add)                                \
@@ -128,7 +135,7 @@ static int dump_lua_chunk(lua_State *L, off_t size,
 	int err;
 	struct rule_list *nr;
 
-	nr = new_rule(event_rls, event_indx, filename, 256);
+	nr = new_rule(event_rls, event_indx, filename, 256UL);
 	if (nr == NULL)
 		return CODE_FAILED;
 
@@ -160,10 +167,12 @@ void free_rules_manager(struct rules_manager *manager)
 	struct rule_list **rls;
 	rls = manager->event_rls;
 
-	for (unsigned int i = 0; i < manager->rls_sz; i++) {
-		if (rls[i] != NULL) {
-			free_rule_list(rls[i]);
-			rls[i] = NULL;
+	if (rls != NULL) {
+		for (unsigned int i = 0; i < manager->rls_sz; i++) {
+			if (rls[i] != NULL) {
+				free_rule_list(rls[i]);
+				rls[i] = NULL;
+			}
 		}
 	}
 
@@ -190,29 +199,293 @@ struct rules_manager *new_rules_manager(size_t rls_sz)
 	return new;
 }
 
+#define VERIFY_SZ 16UL
+#define ON_EVENT_SZ 128UL
+#define RULE_NAME_SZ 256UL
+#define FILENAME_SZ 256UL
+struct rule_config {
+	char verify[VERIFY_SZ];
+	char on_event[ON_EVENT_SZ];
+	char rule_name[RULE_NAME_SZ];
+	char filename[FILENAME_SZ];
+	ssize_t file_sz;
+};
+
+static void free_rule_config(struct rule_config *rc)
+{
+	ASSERT(rc != NULL, "free_rule_config: rc == NULL");
+
+	free(rc);
+}
+
+#define LUA_RULES "luaScripts"
+#define RULE_FAIL 0
+#define RULE_SKIP 1
+#define RULE_SUCCESS 2
+
+// This function will get the configuration information for the given script name
+// and push the associated table on top of the lua stack.
+// If there is no information for this rule, we signal the caller to skip loading for
+// this script.
+// If there is an error we fail, and propogate error to the top, resulting in aborted
+// execution
+static int push_rule_config_table(lua_State *L, char *rule_name)
+{
+	ASSERT(rule_name != NULL, "get_config_filename: rule_name == NULL");
+
+	char *dot = strchr(rule_name, '.');
+	if (dot == NULL) {
+		fprintf(stderr,
+			"push_rule_config_table: invalid file name. no '.lua' extension: %s\n",
+			rule_name);
+		return RULE_SKIP;
+	}
+	dot[0] = 0;
+
+	// get the global table holding the
+	// configuration for all the rules
+	lua_getglobal(L, LUA_RULES);
+	if (!lua_istable(L, -1)) {
+		fprintf(stderr,
+			"push_rule_config_table: invalid config file: rules_lua not found.\n");
+		return RULE_FAIL;
+	}
+
+	// get the configuration for the given rule
+	// if no configuration is present we skip this file
+	lua_pushstring(L, rule_name);
+	lua_gettable(L, -2);
+	if (lua_isnil(L, -1)) {
+		fprintf(stderr,
+			"push_rule_config_table: no config for given rule: %s\n",
+			rule_name);
+		return RULE_SKIP;
+	}
+	if (!lua_istable(L, -1)) {
+		fprintf(stderr,
+			"push_rule_config_table: invalid config file: value of rule %s not a table\n",
+			rule_name);
+		return RULE_FAIL;
+	}
+
+	dot[0] = '.';
+
+	return RULE_SUCCESS;
+}
+
+// This function gets the value of config key and saves it
+// It expects the config table to be on top of the stack.
+static int save_str_rule_config_key(lua_State *L, char *config_val,
+				    char *key_lua, size_t value_sz)
+{
+	size_t sz;
+	const char *str_lua;
+
+	lua_pushstring(L, key_lua);
+	lua_gettable(L, -2);
+	if (!lua_isstring(L, -1)) {
+		fprintf(stderr,
+			"save_str_rule_config_key: invalid config structure. Value of '%s' must be string\n",
+			key_lua);
+		return CODE_FAILED;
+	}
+
+	str_lua = lua_tolstring(L, -1, &sz);
+	if (sz >= value_sz) {
+		fprintf(stderr,
+			"save_str_rule_config_key: invalid config structure. Value of '%s' too long",
+			key_lua);
+		return CODE_FAILED;
+	}
+	memcpy(config_val, str_lua, sz);
+
+	// push the config table back
+	// on top of the stack
+	lua_pushvalue(L, -2);
+
+	return CODE_SUCCESS;
+}
+
+#define VERIFY_KEY "verify"
+#define FILENAME_KEY "filename"
+#define ON_EVENT_KEY "onEvent"
+static struct rule_config *build_rule_config(lua_State *L, char *entry_name)
+{
+	ASSERT(entry_name != NULL, "build_rule_config: entry_name == NULL");
+	int err;
+	struct rule_config *rc;
+	struct stat statbuff;
+
+	rc = (struct rule_config *)calloc(1UL, sizeof(struct rule_config));
+	if (rc == NULL)
+		return NULL;
+
+	char *dot = strchr(entry_name, '.');
+	if (dot == NULL)
+		goto fail;
+
+	// temporarily remove file extension
+	dot[0] = 0;
+	memcpy(rc->rule_name, entry_name, RULE_NAME_SZ);
+	// add file extension back
+	dot[0] = '.';
+
+	err = save_str_rule_config_key(L, rc->verify, VERIFY_KEY, VERIFY_SZ);
+	if (err != CODE_SUCCESS)
+		goto fail;
+
+	err = save_str_rule_config_key(L, rc->filename, FILENAME_KEY,
+				       FILENAME_SZ);
+	if (err != CODE_SUCCESS)
+		goto fail;
+
+	err = save_str_rule_config_key(L, rc->on_event, ON_EVENT_KEY,
+				       ON_EVENT_SZ);
+	if (err != CODE_SUCCESS)
+		goto fail;
+
+	err = stat(rc->filename, &statbuff);
+	if (err == -1) {
+		fprintf(stderr,
+			"build_rule_config: failed to stat file: %s: %d: %s\n",
+			rc->filename, errno, strerror(errno));
+		goto fail;
+	}
+
+	rc->file_sz = statbuff.st_size;
+
+	return rc;
+
+fail:
+	free_rule_config(rc);
+	rc = NULL;
+	return NULL;
+}
+
+#define DEFAULT_RULES_DIR "/opt/trapmine/rules"
+#define RULES_DIR "rulesDir"
+static char *get_rules_directory(lua_State *L)
+{
+	ASSERT(L != NULL, "get_rules_directory: L == NULL");
+	char *rules_dir;
+	const char *str_lua;
+	size_t sz;
+
+	lua_getglobal(L, RULES_DIR);
+	if (!lua_isstring(L, -1)) {
+		return DEFAULT_RULES_DIR;
+	}
+
+	str_lua = lua_tolstring(L, -1, &sz);
+
+	rules_dir = (char *)calloc(sz, sizeof(char));
+	memcpy(rules_dir, str_lua, sz);
+
+	return rules_dir;
+}
+
+#define VERIFY_NONE "none"
+static int verify_script(lua_State *L, struct rule_config *rc)
+{
+	if (strncmp(rc->verify, "none", sizeof(VERIFY_NONE)) == 0) {
+		return CODE_SUCCESS;
+	}
+
+	return CODE_FAILED;
+}
+
+static int event_index_by_name(struct rule_config *rc)
+{
+	printf("lua_processs exit: %d\n", LUA_PROCESS_EXIT_INDX);
+	if (strncmp(rc->on_event, LUA_PROCESS_LAUNCH,
+		    sizeof(LUA_PROCESS_LAUNCH)) == 0) {
+		return LUA_PROCESS_LAUNCH_INDX;
+	}
+	if (strncmp(rc->on_event, LUA_PROCESS_EXIT, sizeof(LUA_PROCESS_EXIT)) ==
+	    0) {
+		return LUA_PROCESS_EXIT_INDX;
+	}
+	if (strncmp(rc->on_event, LUA_SOCKET_CREATE,
+		    sizeof(LUA_SOCKET_CREATE)) == 0) {
+		return LUA_SOCKET_CREATE_INDX;
+	}
+	if (strncmp(rc->on_event, LUA_SOCKET_ACCEPT,
+		    sizeof(LUA_SOCKET_ACCEPT)) == 0) {
+		return LUA_SOCKET_ACCEPT_INDX;
+	}
+	if (strncmp(rc->on_event, LUA_SOCKET_CONNECT,
+		    sizeof(LUA_SOCKET_CONNECT)) == 0) {
+		return LUA_SOCKET_CONNECT_INDX;
+	}
+	if (strncmp(rc->on_event, LUA_PTRACE, sizeof(LUA_PTRACE)) == 0) {
+		return LUA_PTRACE_INDX;
+	}
+	if (strncmp(rc->on_event, LUA_KMODULE, sizeof(LUA_KMODULE)) == 0) {
+		return LUA_KMODULE_INDX;
+	}
+
+	return -1;
+}
+
+static int load_script(lua_State *L, struct rule_config *rc,
+		       struct rule_list **event_rls)
+{
+	ASSERT(L != NULL, "load_script: L == NULL");
+	ASSERT(rc != NULL, "load_script: rc == NULL");
+	int err, event_indx;
+
+	err = verify_script(L, rc);
+	if (err != CODE_SUCCESS)
+		return err;
+
+	event_indx = event_index_by_name(rc);
+	if (event_indx < 0)
+		return CODE_FAILED;
+
+	err = load_lua_chunk(L, rc->filename, rc->file_sz);
+	if (err != CODE_SUCCESS)
+		return err;
+
+	err = dump_lua_chunk(L, rc->file_sz, event_rls, event_indx,
+			     rc->filename);
+
+	return err;
+}
+
 int load_lua_scripts(lua_State *L, struct rules_manager *manager)
 {
 	ASSERT(L != NULL, "load_lua_scripts: L == NULL");
 	ASSERT(manager != NULL, "load_lua_scripts: manager == NULL");
 
 	int err;
-	struct stat statbuff;
 	struct dirent *entry;
-	char _lua_file[256];
-	DIR *rules_dir;
+	char *rules_dir;
+	DIR *dir;
 	struct rule_list **event_rls;
+	struct rule_config *rc;
 
-	rules_dir = opendir(RULES_DIR);
-	if (rules_dir == NULL) {
+	// get the directory where the rule files
+	// are kept
+	rules_dir = get_rules_directory(L);
+	if (rules_dir == NULL)
+		return CODE_FAILED;
+
+	// acquire a handle on the directory
+	dir = opendir(rules_dir);
+	if (dir == NULL) {
 		fprintf(stderr, "load_lua_scripts: Failed to open %s: %d: %s\n",
-			RULES_DIR, errno, strerror(errno));
+			rules_dir, errno, strerror(errno));
 
+		free(rules_dir);
 		return CODE_FAILED;
 	}
 
 	event_rls = manager->event_rls;
 	ASSERT(event_rls != NULL, "load_lua_scripts: event_rls == NULL");
-	while ((entry = readdir(rules_dir)) != NULL) {
+
+	// Loop over all the files in this directory and try to load
+	// any file with the extension '.lua'
+	while ((entry = readdir(dir)) != NULL) {
 		if (entry->d_type != DT_REG)
 			continue;
 
@@ -221,45 +494,65 @@ int load_lua_scripts(lua_State *L, struct rules_manager *manager)
 		if (strstr(entry->d_name, LUA_EXT) == NULL)
 			continue;
 
-		snprintf(_lua_file, 256, "%s/%s", RULES_DIR, entry->d_name);
-
-		err = stat(_lua_file, &statbuff);
-		// This might fail in case the filename is longer than 256
-		// character. For now we can just ignore the error and go to next file
-		// TODO: account for the case where filename is greater than 256
-		if (err == -1) {
+		err = push_rule_config_table(L, entry->d_name);
+		if (err == RULE_SKIP)
 			continue;
-		}
+		if (err == RULE_FAIL)
+			return CODE_FAILED;
 
-		err = load_lua_chunk(L, _lua_file, &statbuff);
+		rc = build_rule_config(L, entry->d_name);
+		if (rc == NULL)
+			continue;
+
+		err = load_script(L, rc, event_rls);
 		if (err != CODE_SUCCESS) {
 			fprintf(stderr,
-				"load_lua_scripts: Could not load lua file into buffer: %s\n",
-				_lua_file);
-			continue;
-		}
-
-		err = dump_lua_chunk(L, statbuff.st_size, event_rls, 0,
-				     _lua_file);
-		if (err != CODE_SUCCESS) {
-			fprintf(stderr,
-				"load_lua_scripts: Could not dump lua buffer loaded from file: %s\n",
-				_lua_file);
+				"load_lua_scripts: Failed to load lua script: %s\n",
+				rc->filename);
 		} else {
 			manager->rules_loaded++;
 		}
+
+		free_rule_config(rc);
 	}
 
-	err = closedir(rules_dir);
+	err = closedir(dir);
 	if (err != 0) {
 		fprintf(stderr,
-			"load_lua_scripts: failed to close rules_dir: %d: %s\n",
+			"load_lua_scripts: failed to close directory: %d: %s\n",
 			errno, strerror(errno));
 
 		return CODE_FAILED;
 	}
 
-	printf("load_lua_script: number of rules loaded: %lu\n",
+	printf("load_lua_scripts: number of rules loaded: %lu\n",
 	       manager->rules_loaded);
 	return CODE_SUCCESS;
+}
+
+int get_event_indx(int syscall)
+{
+	if (IS_EXIT_EVENT(syscall)) {
+		return LUA_PROCESS_EXIT_INDX;
+	}
+	if (IS_PROCESS_LAUNCH(syscall)) {
+		return LUA_PROCESS_LAUNCH_INDX;
+	}
+	if (IS_SOCKET_CREATE(syscall)) {
+		return LUA_SOCKET_CREATE_INDX;
+	}
+	if (syscall == SYS_ACCEPT) {
+		return LUA_SOCKET_ACCEPT_INDX;
+	}
+	if (syscall == SYS_CONNECT) {
+		return LUA_SOCKET_CONNECT_INDX;
+	}
+	if (syscall == SYS_PTRACE) {
+		return LUA_PTRACE_INDX;
+	}
+	if (syscall == SYS_FINIT_MODULE) {
+		return LUA_KMODULE_INDX;
+	} else {
+		return LUA_NONE;
+	}
 }

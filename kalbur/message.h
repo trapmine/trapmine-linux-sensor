@@ -114,7 +114,9 @@ struct message_state {
 	struct message_state
 		*prev_msg; // Needed inorder to link and unlink new messages
 	int cpu;
+	int event_id;
 	uint64_t progress;
+	uint64_t action;
 };
 
 int construct_message_state(struct message_state *ms,
@@ -126,5 +128,7 @@ struct probe_event_header *get_event_header(struct message_state *ms);
 void delete_message(struct message_state **ms);
 void transition_ms_progress(struct message_state *ms,
 			    uint64_t transition_target, int prog_err);
+void tag_ms(struct message_state *ms, unsigned long tag);
+void set_ms_event_id(struct message_state *ms, int event_id);
 
 #endif // MESSAGE_H

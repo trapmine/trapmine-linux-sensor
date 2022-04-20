@@ -78,12 +78,24 @@ static void push_socket_create_attr(lua_State *L, const char *attr_name,
 	}
 }
 
+static void push_default(lua_State *L, const char *attr_name, void *event_obj)
+{
+	int err;
+	struct probe_event_header *eh = (struct probe_event_header *)event_obj;
+
+	err = push_event_header_attr(L, attr_name, eh);
+	if (err != CODE_SUCCESS)
+		lua_pushnil(L);
+}
+
 push_attr_fn get_push_attr_fn(int syscall)
 {
 	if (IS_EXIT_EVENT(syscall)) {
 		return push_exit_attr;
 	} else if (syscall == SYS_SOCKET) {
 		return push_socket_create_attr;
+	} else {
+		return push_default;
 	}
 
 	return NULL;

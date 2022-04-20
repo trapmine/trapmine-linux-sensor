@@ -10,7 +10,8 @@ struct lua_engine {
 	struct rules_manager *manager;
 };
 
-int process_rule(struct lua_engine *e, struct message_state *ms);
-struct lua_engine *initialize_new_lua_engine(void);
+int apply_rules(struct lua_engine *e, struct message_state *ms);
+struct lua_engine *initialize_new_lua_engine(struct rules_manager *manager);
+struct rules_manager *init_rules_manager(char *config_file);
 
 #endif // LUA_ENGINE_H

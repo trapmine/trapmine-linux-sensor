@@ -6,21 +6,9 @@
 #include <syscall_defs.h>
 #include <message.h>
 #include <events.h>
+#include "helpers_fn.h"
 #include "lua_engine.h"
 #include "rule_manager.h"
-
-//static void test_rule(lua_State *l)
-//{
-//	char *code =
-//		"print(Event.type)\nprint(Event.family)\nprint(Event.inode)\nprint(Event.syscall)";
-//
-//	int res = luaL_dostring(l, code);
-//	if (res != LUA_OK) {
-//		printf("Error: %s\n", lua_tostring(l, -1));
-//	}
-//
-//	return;
-//}
 
 static int execute_bytecode(lua_State *L, char *bytecode, size_t bytecode_sz,
 			    char *script_name)
@@ -47,50 +35,57 @@ static int execute_bytecode(lua_State *L, char *bytecode, size_t bytecode_sz,
 	return CODE_SUCCESS;
 }
 
-int process_rule(struct lua_engine *e, struct message_state *ms)
+static void evaluate_rule_list(lua_State *L, struct rule_list *r)
 {
-	int event_indx, err;
+	int err;
+	while (r != NULL) {
+		err = execute_bytecode(L, r->rule_bytecode, r->bytecode_sz,
+				       r->script_name);
+		if (err != CODE_SUCCESS) {
+			fprintf(stderr,
+				"process_rule: Failed to execute bytecode from: %s\n",
+				r->script_name);
+		}
+
+		r = r->next_rule;
+	}
+}
+
+int apply_rules(struct lua_engine *e, struct message_state *ms)
+{
+	int event_indx;
 	struct probe_event_header *eh;
 	struct rule_list **event_rls;
 	struct rule_list *r;
 
-#ifdef __DEBUG__
-	int i = 0;
-#endif
+	ASSERT(ms != NULL, "process_rule: ms == NULL");
+	ASSERT(ms->primary_data != NULL,
+	       "process_rule: ms->primary_data == NULL");
+	eh = (struct probe_event_header *)ms->primary_data;
+	event_indx = get_event_indx(eh->syscall_nr);
+	// no rule list for this type of event
+	if (event_indx == LUA_NONE)
+		return CODE_SUCCESS;
 
-	event_indx = 0;
 	ASSERT(e->manager != NULL, "process_rule: manager == NULL");
 	event_rls = e->manager->event_rls;
 	ASSERT(event_rls != NULL, "process_rule: event_rls == NULL");
 
-	eh = ms->primary_data;
-	if (IS_EXIT_EVENT(eh->syscall_nr)) {
-		setup_event_context(e->L, ms);
+	setup_event_context(e->L, ms);
 
-		r = event_rls[event_indx];
-		while (r != NULL) {
-#ifdef __DEBUG__
-			printf("%d] process_rule: executing script: %s\n", i++,
-			       r->script_name);
-#endif
-			err = execute_bytecode(e->L, r->rule_bytecode,
-					       r->bytecode_sz, r->script_name);
-			if (err != CODE_SUCCESS) {
-				fprintf(stderr,
-					"process_rule: Failed to execute bytecode from: %s\n",
-					r->script_name);
-			}
+	// evaluate rule for any event
+	r = event_rls[LUA_ANY];
+	if (r != NULL)
+		evaluate_rule_list(e->L, r);
 
-			r = r->next_rule;
-		}
-	}
+	// evaluate rule for specific event
+	r = event_rls[event_indx];
+	if (r != NULL)
+		evaluate_rule_list(e->L, r);
+
+	teardown_event_context(e->L);
 
 	return CODE_SUCCESS;
-}
-
-static lua_State *new_state(void)
-{
-	return luaL_newstate();
 }
 
 static void initialize_state(lua_State *l)
@@ -102,23 +97,22 @@ static void initialize_state(lua_State *l)
 	luaopen_math(l);
 }
 
-// Expects lua_State to have been closed already.
-// lua_close(L) closes the lua_State object and
-// frees the points as well
-static void free_lua_engine(struct lua_engine *e)
+static int init_helpers(lua_State *L)
 {
-	ASSERT(e->L == NULL, "free_lua_engine: e->L != NULL");
+	ASSERT(L != NULL, "init_helpers: L == NULL");
 
-	if (e->manager != NULL) {
-		free_rules_manager(e->manager);
-		e->manager = NULL;
-	}
+	lua_pushcfunction(L, tag_event);
+	lua_setglobal(L, "TagEvent");
 
-	free(e);
+	return CODE_SUCCESS;
 }
 
-struct lua_engine *initialize_new_lua_engine(void)
+struct lua_engine *
+initialize_new_lua_engine(struct rules_manager *read_only_manager)
 {
+	ASSERT(read_only_manager != NULL,
+	       "initialize_new_lua_engine: manager == NULL");
+
 	int err;
 	struct lua_engine *e;
 
@@ -126,7 +120,9 @@ struct lua_engine *initialize_new_lua_engine(void)
 	if (e == NULL)
 		return NULL;
 
-	e->L = new_state();
+	e->manager = read_only_manager;
+
+	e->L = luaL_newstate();
 	if (e->L == NULL)
 		goto error;
 
@@ -136,11 +132,7 @@ struct lua_engine *initialize_new_lua_engine(void)
 	if (err != CODE_SUCCESS)
 		goto close_state;
 
-	e->manager = new_rules_manager(TYPED_MACRO(TOTAL_EVENTS, UL));
-	if (e->manager == NULL)
-		goto close_state;
-
-	err = load_lua_scripts(e->L, e->manager);
+	err = init_helpers(e->L);
 	if (err != CODE_SUCCESS)
 		goto close_state;
 
@@ -150,7 +142,49 @@ close_state:
 	lua_close(e->L);
 	e->L = NULL;
 error:
-	free_lua_engine(e);
+	free(e);
 	e = NULL;
+	return NULL;
+}
+
+struct rules_manager *init_rules_manager(char *config_file)
+{
+	int err;
+	lua_State *L;
+
+	struct rules_manager *new =
+		new_rules_manager(TYPED_MACRO(TOTAL_EVENTS, UL));
+	if (new == NULL)
+		return NULL;
+
+	L = luaL_newstate();
+	if (L == NULL)
+		goto fail;
+
+	err = luaL_dofile(L, config_file);
+	if (err != LUA_OK) {
+		char *errstr = lua_tostring(L, -1);
+		fprintf(stderr,
+			"init_rules_manager: failed to load configuration file: %s: %s\n",
+			config_file, errstr);
+		goto close_state;
+	}
+
+	err = load_lua_scripts(L, new);
+	if (err != CODE_SUCCESS) {
+		fprintf(stderr,
+			"init_rules_manager: Failed to load lua scripts\n");
+		goto close_state;
+	}
+
+	lua_close(L);
+	return new;
+
+close_state:
+	lua_close(L);
+	L = NULL;
+fail:
+	free_rules_manager(new);
+	new = NULL;
 	return NULL;
 }
