@@ -98,6 +98,10 @@ typedef int (*message_complete_predicate)(struct message_state *);
 #define IS_MS_DB_SAVED(ms) (((ms->progress) & (MS_DB_SAVED)) != 0)
 #define IS_MS_GC(ms) (((ms->progress) & (MS_GC)) != 0)
 
+#define TAG_ALERT_INDX 0
+#define TAG_HL_INDX 1
+#define TOTAL_TAGS 2
+
 struct message_state {
 	pthread_mutex_t message_state_lock;
 	void *primary_data;
@@ -116,7 +120,7 @@ struct message_state {
 	int cpu;
 	int event_id;
 	uint64_t progress;
-	uint64_t action;
+	uint64_t tags[TOTAL_TAGS];
 };
 
 int construct_message_state(struct message_state *ms,
@@ -128,7 +132,7 @@ struct probe_event_header *get_event_header(struct message_state *ms);
 void delete_message(struct message_state **ms);
 void transition_ms_progress(struct message_state *ms,
 			    uint64_t transition_target, int prog_err);
-void tag_ms(struct message_state *ms, unsigned long tag);
+void tag_ms(struct message_state *ms, int indx, unsigned long tag);
 void set_ms_event_id(struct message_state *ms, int event_id);
 
 #endif // MESSAGE_H

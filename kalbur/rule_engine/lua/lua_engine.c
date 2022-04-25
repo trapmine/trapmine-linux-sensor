@@ -6,7 +6,7 @@
 #include <syscall_defs.h>
 #include <message.h>
 #include <events.h>
-#include "helpers_fn.h"
+#include "lua_ms_tags.h"
 #include "lua_engine.h"
 #include "rule_manager.h"
 
@@ -97,16 +97,6 @@ static void initialize_state(lua_State *l)
 	luaopen_math(l);
 }
 
-static int init_helpers(lua_State *L)
-{
-	ASSERT(L != NULL, "init_helpers: L == NULL");
-
-	lua_pushcfunction(L, tag_event);
-	lua_setglobal(L, "TagEvent");
-
-	return CODE_SUCCESS;
-}
-
 struct lua_engine *
 initialize_new_lua_engine(struct rules_manager *read_only_manager)
 {
@@ -132,7 +122,7 @@ initialize_new_lua_engine(struct rules_manager *read_only_manager)
 	if (err != CODE_SUCCESS)
 		goto close_state;
 
-	err = init_helpers(e->L);
+	err = initialize_tags(e->L);
 	if (err != CODE_SUCCESS)
 		goto close_state;
 
