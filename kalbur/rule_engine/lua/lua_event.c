@@ -19,7 +19,7 @@ static int event_index(lua_State *L)
 		lua_pushnil(L);
 		return 1;
 	}
-	void *ms_event = event->ms_event;
+	void *ms = event->ms;
 
 	const char *attr = lua_tostring(L, -1);
 	if (attr == NULL) {
@@ -29,7 +29,7 @@ static int event_index(lua_State *L)
 
 	ASSERT(event->push_attr != NULL,
 	       "event_index: event->push_att == NULL");
-	event->push_attr(L, attr, ms_event);
+	event->push_attr(L, attr, ms);
 
 	return 1;
 }
@@ -57,7 +57,6 @@ void setup_event_context(lua_State *L, struct message_state *ms)
 	ASSERT(global_lua_event->push_attr != NULL,
 	       "setup_event_context: global_lua_event->push_attr == NULL");
 
-	global_lua_event->ms_event = ms->primary_data;
 	global_lua_event->ms = ms;
 
 	return;

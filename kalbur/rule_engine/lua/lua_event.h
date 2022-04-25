@@ -7,11 +7,10 @@
 #define EVENT_GLOBAL "Event"
 
 typedef void (*push_attr_fn)(lua_State *L, const char *attr_name,
-			     void *event_obj);
+			     struct message_state *event_obj);
 
 struct lua_event {
 	push_attr_fn push_attr;
-	void *ms_event;
 	void *ms;
 };
 

@@ -396,7 +396,6 @@ static int verify_script(lua_State *L, struct rule_config *rc)
 
 static int event_index_by_name(struct rule_config *rc)
 {
-	printf("lua_processs exit: %d\n", LUA_PROCESS_EXIT_INDX);
 	if (strncmp(rc->on_event, LUA_PROCESS_LAUNCH,
 		    sizeof(LUA_PROCESS_LAUNCH)) == 0) {
 		return LUA_PROCESS_LAUNCH_INDX;
