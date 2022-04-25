@@ -461,7 +461,6 @@ out:
 
 MESSAGE_HANDLER_FUNC(save_exit_event)
 {
-	ms->event_id = 10;
 	return CODE_SUCCESS;
 }
 

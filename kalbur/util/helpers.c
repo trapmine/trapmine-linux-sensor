@@ -23,8 +23,8 @@ char *build_cmdline(char *args_data, uint32_t argv_off, unsigned long nbytes)
 	char *args = NULL;
 	char *str = NULL;
 
-	ASSERT(argv_off != LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE),
-	       "build_env: env_off == LAST_NULL_BYTE");
+	if (argv_off == LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE))
+		return NULL;
 
 	if (args_data[argv_off] == 0)
 		return NULL;
@@ -48,8 +48,8 @@ char *build_env(char *env_data, uint32_t env_off, unsigned long nbytes)
 	char *env = NULL;
 	char *str = NULL;
 
-	ASSERT(env_off != LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE),
-	       "build_env: env_off == LAST_NULL_BYTE");
+	if (env_off == LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE))
+		return NULL;
 
 	if (env_data[env_off] == 0)
 		return NULL;

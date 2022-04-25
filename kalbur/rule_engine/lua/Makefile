@@ -7,8 +7,9 @@ EVENT := lua_event
 ATTR_HANDLER := attr_handler
 MANAGER := rule_manager
 HELPERS_FN := helpers_fn
+TAGS := lua_ms_tags
 
-all: $(ENGINE).o $(EVENT).o $(ATTR_HANDLER).o $(MANAGER).o $(HELPERS_FN).o
+all: $(ENGINE).o $(EVENT).o $(ATTR_HANDLER).o $(MANAGER).o $(TAGS).o
 
 $(ENGINE).o: $(ENGINE).c $(ENGINE).h
 	$(call msg,LUA_ENGINE,$@)
@@ -26,9 +27,9 @@ $(MANAGER).o: $(MANAGER).c $(MANAGER).h
 	$(call msg,RULE_MANAGER,$@)
 	$(Q)$(CC) -DAPPLY_ASSERT $(DEBUG_FLAG) $(CFLAGS) $(INCLUDES) -c $(MANAGER).c -o $@
 
-$(HELPERS_FN).o: $(HELPERS_FN).c $(HELPERS_FN).h
-	$(call msg,LUA_HELPERS,$@)
-	$(Q)$(CC) -DAPPLY_ASSERT $(DEBUG_FLAG) $(CFLAGS) $(INCLUDES) -c $(HELPERS_FN).c -o $@
+$(TAGS).o: $(TAGS).c $(TAGS).h
+	$(call msg,LUA_TAGS,$@)
+	$(Q)$(CC) -DAPPLY_ASSERT $(DEBUG_FLAG) $(CFLAGS) $(INCLUDES) -c $(TAGS).c -o $@
 
 clean:
 	$(call msg,CLEAN)

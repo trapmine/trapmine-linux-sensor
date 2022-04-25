@@ -506,8 +506,7 @@ int insert_proc_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 	argv_off = pinfo->args.argv_offset;
 	ASSERT(argv_off < PER_CPU_STR_BUFFSIZE,
 	       "insert_proc_info: argv_off >= PER_CPU_STR_BUFFSIZE");
-	if ((pinfo->args.present == 0) ||
-	    argv_off == LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE)) {
+	if (pinfo->args.present == 0) {
 		sqlite3_bind_null(ppStmt, sqlite3_bind_parameter_index(
 						  ppStmt, PARAM_HOLDER(ARGS)));
 	} else {
@@ -524,8 +523,7 @@ int insert_proc_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 	env_off = pinfo->env.env_offset;
 	ASSERT(env_off < PER_CPU_STR_BUFFSIZE,
 	       "insert_proc_info: env_off >= PER_CPU_STR_BUFFSIZE");
-	if ((pinfo->env.present == 0) ||
-	    (env_off == LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE))) {
+	if (pinfo->env.present == 0) {
 		sqlite3_bind_null(ppStmt, sqlite3_bind_parameter_index(
 						  ppStmt, PARAM_HOLDER(ENV)));
 	} else {
