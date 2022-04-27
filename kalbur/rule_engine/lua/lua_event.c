@@ -73,6 +73,9 @@ void teardown_event_context(lua_State *L)
 	       "teardown_event_context: global_lua_event == NULL");
 
 	__builtin_memset(global_lua_event, 0, sizeof(struct lua_event));
+
+	lua_settop(L, 0);
+
 	return;
 }
 
