@@ -35,10 +35,11 @@ char *build_cmdline(char *args_data, uint32_t argv_off, unsigned long nbytes)
 
 	str = &(args_data[argv_off]);
 	memcpy(args, str, nbytes);
-	for (unsigned int i = 0; i < nbytes; ++i) {
+	for (unsigned int i = 0; i < (nbytes - 1); ++i) {
 		if (args[i] == 0)
 			args[i] = ',';
 	}
+	args[nbytes - 1] = 0;
 
 	return args;
 }
@@ -61,10 +62,12 @@ char *build_env(char *env_data, uint32_t env_off, unsigned long nbytes)
 	str = &(env_data[env_off]);
 	memcpy(env, str, nbytes);
 
-	for (unsigned int i = 0; i < nbytes; ++i) {
+	for (unsigned int i = 0; i < (nbytes - 1); ++i) {
 		if (env[i] == 0)
 			env[i] = ',';
 	}
+	env[nbytes - 1] = 0;
+
 	return env;
 }
 
