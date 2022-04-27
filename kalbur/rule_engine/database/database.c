@@ -196,7 +196,7 @@ int prepare_sql(sqlite3 *db, hashtable_t *hash_table)
 		err = sqlite3_prepare_v2(db, SQL_STMTS[i].sql,
 					 (int)SQL_STMTS[i].sql_len, &ppStmt,
 					 NULL);
-		if (!ppStmt) {
+		if (err != SQLITE_OK) {
 			fprintf(stderr,
 				"[err:%d:%s] Failed to prepare sql: %s.\n", err,
 				sqlite3_errmsg(db), SQL_STMTS[i].sql);
