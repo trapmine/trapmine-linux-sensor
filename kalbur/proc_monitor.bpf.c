@@ -2972,43 +2972,43 @@ int tracepoint__syscalls__sys_exit_unshare(struct syscall_execve_ctx *ctx)
 /* */
 
 //#define KERN_STACKID_FLAGS (0 | BPF_F_FAST_STACK_CMP)
-SEC("kprobe/commit_creds")
-int kprobe__commit_creds(void *ctx)
-{
-	u64 *caller;
-	u64 tgid_pid;
-	struct cfg_integrity cfg = { 0 };
-	int err;
-	u64 stack[2];
-	event_t *emeta;
-
-	tgid_pid = bpf_get_current_pid_tgid();
-
-	// if we have an ongoing event for this process, i.e. commit creds
-	// was called from a syscall we are tracing then very unlikely to be
-	// LPE attempt. So, we can return.
-	emeta = bpf_map_lookup_elem(&event_metadata_map, &tgid_pid);
-	if (emeta != 0)
-		goto out;
-
-	// check if root creds are being commited. Get from rdi.
-
-	initialize_event_header(&cfg.eh, tgid_pid, LPE_COMMIT_CREDS);
-
-	// Get 32 stack addresses.
-	err = bpf_get_stack(ctx, stack, 2 * sizeof(u64), 0);
-	if (err < 0)
-		SINGULAR("failed to read the stack\n");
-
-	// get syscall information from current->audit_context
-
-	cfg.caller_addr = stack[1];
-	bpf_perf_event_output(ctx, &streamer, BPF_F_CURRENT_CPU, &cfg,
-			      sizeof(struct cfg_integrity));
-
-out:
-	return 0;
-}
+//SEC("kprobe/commit_creds")
+//int kprobe__commit_creds(void *ctx)
+//{
+//	u64 *caller;
+//	u64 tgid_pid;
+//	struct cfg_integrity cfg = { 0 };
+//	int err;
+//	u64 stack[2];
+//	event_t *emeta;
+//
+//	tgid_pid = bpf_get_current_pid_tgid();
+//
+//	// if we have an ongoing event for this process, i.e. commit creds
+//	// was called from a syscall we are tracing then very unlikely to be
+//	// LPE attempt. So, we can return.
+//	emeta = bpf_map_lookup_elem(&event_metadata_map, &tgid_pid);
+//	if (emeta != 0)
+//		goto out;
+//
+//	// check if root creds are being commited. Get from rdi.
+//
+//	initialize_event_header(&cfg.eh, tgid_pid, LPE_COMMIT_CREDS);
+//
+//	// Get 32 stack addresses.
+//	err = bpf_get_stack(ctx, stack, 2 * sizeof(u64), 0);
+//	if (err < 0)
+//		SINGULAR("failed to read the stack\n");
+//
+//	// get syscall information from current->audit_context
+//
+//	cfg.caller_addr = stack[1];
+//	bpf_perf_event_output(ctx, &streamer, BPF_F_CURRENT_CPU, &cfg,
+//			      sizeof(struct cfg_integrity));
+//
+//out:
+//	return 0;
+//}
 
 SEC("tracepoint/syscalls/sys_enter_ptrace")
 int tracepoint__syscalls__sys_enter_ptrace(struct syscall_enter_ptrace *ctx)
