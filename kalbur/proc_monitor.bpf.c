@@ -215,7 +215,7 @@ struct syscall_exit {
  * constrain upper bounds by taking into account inter variable dependence.
  */
 
-#define PERCPU_EVENTS 5
+#define PERCPU_EVENTS 50
 #define MAX_EVENT_BUFFERS (SMP_NUM * PERCPU_EVENTS)
 
 #define TOTAL_STR_BUFFSIZE ((MAX_EVENT_BUFFERS + 1) * (PER_CPU_STR_BUFFSIZE))
@@ -496,9 +496,9 @@ __attribute__((always_inline)) static long get_working_buff(event_t *event)
 
 	err = -EBUSY;
 out:
-	if (err != 0) {
+	if (err != 0)
 		SINGULAR("Failed to acquire working buffer: %d\n", err);
-	}
+
 	return err;
 }
 
@@ -599,42 +599,6 @@ __attribute__((always_inline)) static u32 save_str(char *str, u32 buff_num)
 out:
 	return str_size;
 }
-
-//__attribute__((always_inline)) static u64
-//save_str_arr_to_buff(u32 buff_num, unsigned long *args)
-//{
-//	char *arg_str;
-//	long err;
-//	unsigned long scnt;
-//	u64 nbyte_pair;
-//	u32 strs, s;
-//
-//	strs = 0;
-//	scnt = 0;
-//#pragma clang loop unroll(full)
-//	for (unsigned int i = 0; i < MAX_ARGS_READ; ++i) {
-//		if (args == 0)
-//			goto out;
-//
-//		err = bpf_probe_read(&arg_str, sizeof(char *), args);
-//		JUMP_TARGET(out);
-//
-//		if (!arg_str) {
-//			goto out;
-//		}
-//
-//		s = save_str(arg_str, buff_num);
-//		if (s > 0)
-//			strs += s;
-//
-//		scnt++;
-//
-//		args++;
-//	}
-//
-//out:
-//	return (scnt << 32) | strs;
-//}
 
 __attribute__((always_inline)) static long
 save_orig_name(u32 str_buff_num, u32 path_size, const unsigned char *name)
@@ -1050,74 +1014,6 @@ get_underlying_file_of_task(struct task_struct *tsk)
 out:
 	return f;
 }
-
-__attribute__((always_inline)) static void
-handle_fork_clone_enter(struct syscall_enter_fork_ctx *ctx,
-			unsigned long clone_flags)
-{
-	return;
-	//	struct task_struct *tsk;
-	//	u64 tgid_pid;
-	//	int err;
-	//	event_t emeta;
-	//	struct process_info pinfo = { 0 };
-	//
-	//	tgid_pid = bpf_get_current_pid_tgid();
-	//
-	//	// We want to set the eh.tgid_pid to the tgid_pid of the new
-	//	// process. We will do that later, during syscall exit.
-	//	initialize_event_header(&pinfo.eh, 0, ctx->syscall_nr);
-	//
-	//	// set clone flags if clone syscall
-	//	if (clone_flags != 0)
-	//		pinfo.clone_flags = clone_flags;
-	//	else
-	//		pinfo.clone_flags = 0;
-	//
-	//	// set ppid. If CLONE_PARENT or CLONE_THREAD flag set,
-	//	// ppid is the tgid_pid of the parent process of current.
-	//	// Otherwise ppid is set to the tgid_pid of current.
-	//	if ((clone_flags & CLONE_PARENT) || (clone_flags & CLONE_THREAD)) {
-	//		tsk = (struct task_struct *)bpf_get_current_task();
-	//		if (tsk != NULL)
-	//			pinfo.ppid = get_ppid_of_task(tsk);
-	//		else
-	//			goto out;
-	//	} else {
-	//		pinfo.ppid = tgid_pid;
-	//	}
-	//
-	//	// initialize event metadata with the ppid since we do not
-	//	// know the tgid_pid of the calling process yet.
-	//	err = initialize_event(&emeta, pinfo.ppid, ctx->syscall_nr);
-	//	JUMP_TARGET(out);
-	//
-	//	// save pinfo with the tgid_pid of the parent, since we donot know
-	//	// the tgid_pid of the new process yet.
-	//	err = bpf_map_update_elem(&proc_info_map, &pinfo.ppid, &pinfo,
-	//				  BPF_NOEXIST);
-	//	if (err < 0) {
-	//		bpf_printk("failed to save proc_info for %lu\n", pinfo.ppid);
-	//		goto out;
-	//	}
-	//
-	//	if (clone_flags & CLONE_PARENT) {
-	//		bpf_printk(
-	//			"1) initialize event for pid: %ld, with CLONE_PARENT set\n",
-	//			pinfo.ppid);
-	//	} else if (clone_flags & CLONE_THREAD) {
-	//		bpf_printk(
-	//			"1) initialize event for pid: %ld, with CLONE_THREAD set\n",
-	//			pinfo.ppid);
-	//	} else {
-	//		bpf_printk(
-	//			"1) initialize event for pid: %ld, with some other set\n",
-	//			pinfo.ppid);
-	//	}
-	//out:
-	//	return;
-}
-
 __attribute__((always_inline)) static int calculate_write_indx(u32 buff_indx,
 							       u32 buff_num)
 {
@@ -1812,6 +1708,7 @@ get_standard_pipes_inodes(struct process_info *pinfo)
 out:
 	return;
 }
+
 __attribute__((always_inline)) static void
 handle_fork_clone_exit(struct syscall_exit_fork_clone_ctx *ctx)
 {
@@ -1831,10 +1728,13 @@ handle_fork_clone_exit(struct syscall_exit_fork_clone_ctx *ctx)
 	tgid_pid = bpf_get_current_pid_tgid();
 
 	err = initialize_event(&emeta, tgid_pid, ctx->syscall_nr);
+	if (err < 0) {
+		bpf_printk("1) Failed to init event: %d\n", err);
+	}
 	JUMP_TARGET(out);
 
 	// initialize event header. Set the tgid_pid of the new process
-	pinfo.eh.tgid_pid = tgid_pid;
+	initialize_event_header(&pinfo.eh, tgid_pid, ctx->syscall_nr);
 
 	err = initialize_str_buffer(&pinfo.eh, ctx->syscall_nr,
 				    pinfo.eh.tgid_pid, emeta.wbuff);
@@ -1872,6 +1772,9 @@ handle_fork_clone_exit(struct syscall_exit_fork_clone_ctx *ctx)
 	// emit process_info struct to userspace
 	err = bpf_perf_event_output(ctx, &streamer, BPF_F_CURRENT_CPU, &pinfo,
 				    sizeof(struct process_info));
+	if (err >= 0) {
+		bpf_printk("2) Sent to userspace\n");
+	}
 	JUMP_TARGET(handle_sys_exit);
 
 	// emit string data to userspace
@@ -1882,122 +1785,6 @@ handle_sys_exit:
 out:
 	return;
 }
-
-// TODO: BUG HERE. syscall exit not being handled correctly.
-//__attribute__((always_inline)) static void
-//handle_fork_clone_exit(struct syscall_exit_fork_clone_ctx *ctx)
-//{
-//	int err;
-//	struct file *f;
-//	struct task_struct *tsk;
-//	struct cred *credentials;
-//	u64 tgid_pid, ppid, pathlen_offset;
-//	event_t *emeta;
-//	struct process_info *pinfo;
-//	struct process_info new_pinfo;
-//
-//	// Check if returning from newly created process
-//	// or not. If not, then exit. We will handle syscall
-//	// exiting in the newly create process's return path.
-//	if (ctx->pid != 0)
-//		goto out;
-//
-//	tgid_pid = bpf_get_current_pid_tgid();
-//
-//	// get ppid of current task. This is how we can get the process_info
-//	// object we are working on.
-//	tsk = (struct task_struct *)bpf_get_current_task();
-//	if (tsk == 0) {
-//		bpf_printk("failed to get current task\n");
-//		goto out;
-//	}
-//
-//	// get the tgid_pid of the parent
-//	ppid = get_ppid_of_task(tsk);
-//	if (ppid == 0) {
-//		bpf_printk("failed to get ppid of current task\n");
-//		goto out;
-//	}
-//
-//	// validate that an event is active
-//	emeta = bpf_map_lookup_elem(&event_metadata_map, &ppid);
-//	if (emeta == 0) {
-//		bpf_printk("2a:%ld) %lu: no active event for ppid: %lu\n",
-//			   ctx->pid, tgid_pid, ppid);
-//		goto handle_sys_exit;
-//	} else {
-//		bpf_printk("2b:%ld) %lu: found active event for ppid: %lu\n",
-//			   ctx->pid, tgid_pid, ppid);
-//	}
-//
-//	// get process_info object
-//	pinfo = (struct process_info *)bpf_map_lookup_elem(&proc_info_map,
-//							   &ppid);
-//	if (pinfo == NULL)
-//		goto handle_sys_exit;
-//
-//	err = bpf_probe_read(&new_pinfo, sizeof(struct process_info), pinfo);
-//	JUMP_TARGET(handle_sys_exit);
-//
-//	// initialize event header. Set the tgid_pid of the new process
-//	new_pinfo.eh.tgid_pid = tgid_pid;
-//
-//	// initialize event metadata to get a working buffer for strings.
-//	// We use ppid to index, because that is also the index of the
-//	// process_info object. In handle_syscall_exit, we need event_metadata
-//	// and the saved object to have the same key, so we can delete them both.
-//	//	err = initialize_event(&emeta, ppid, ctx->syscall_nr);
-//	//	JUMP_TARGET(out);
-//
-//	/* After this point, jump target of error should be handle_sys_exit.
-//	 * So that we can reset the string buffer. and delete event info */
-//
-//	// intialize string buffer. The tgid_pid passed here is to set the event header
-//	// of the strings buffer. Therefore, here it NEEDS to be the tgid_pid of the
-//	// new process.
-//	err = initialize_str_buffer(&new_pinfo.eh, ctx->syscall_nr,
-//				    new_pinfo.eh.tgid_pid, emeta->wbuff);
-//	JUMP_TARGET(handle_sys_exit);
-//
-//	// set interpreter to null
-//	new_pinfo.interp_str_offset = LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE);
-//
-//	// set file path
-//	f = get_underlying_file_of_task(tsk);
-//	if (f != NULL) {
-//		pathlen_offset = save_file_path(f, emeta);
-//		new_pinfo.file.file_offset = pathlen_offset & 0xffffffff;
-//		new_pinfo.file.path_len = pathlen_offset >> 32;
-//
-//		save_file_info(f, &new_pinfo.file);
-//	}
-//
-//	// copy credentials
-//	err = bpf_core_read(&credentials, sizeof(struct cred *), &tsk->cred);
-//	if (err >= 0) {
-//		save_credentials(credentials, &new_pinfo);
-//	}
-//
-//	// save args, and environment
-//	copy_args_env(emeta, &new_pinfo);
-//
-//	// set stdio
-//	get_standard_pipes_inodes(&new_pinfo);
-//
-//	// emit process_info struct to userspace
-//	err = bpf_perf_event_output(ctx, &streamer, BPF_F_CURRENT_CPU,
-//				    &new_pinfo, sizeof(struct process_info));
-//	JUMP_TARGET(handle_sys_exit);
-//
-//	// emit string data to userspace
-//	err = output_arr_to_streamer(ctx, &str_buffs_map, PER_CPU_STR_BUFFSIZE,
-//				     emeta);
-//
-//handle_sys_exit:
-//	handle_syscall_exit(&proc_info_map, emeta, ppid);
-//out:
-//	return;
-//}
 
 __attribute__((always_inline)) static int
 initialize_dump_bin(mmap_dump_buff_t *out, u64 event_time, u64 vm_base,
@@ -2718,28 +2505,6 @@ int tracepoint__sched__sched_process_exit(void *ctx)
 				    sizeof(struct exit_event));
 	JUMP_TARGET(out);
 out:
-	return 0;
-}
-
-SEC("tracepoint/syscalls/sys_enter_vfork")
-int tracepoint__syscalls__sys_enter_vfork(struct syscall_enter_fork_ctx *ctx)
-{
-	handle_fork_clone_enter(ctx, 0);
-	return 0;
-}
-
-SEC("tracepoint/syscalls/sys_enter_fork")
-int tracepoint__syscalls__sys_enter_fork(struct syscall_enter_fork_ctx *ctx)
-{
-	handle_fork_clone_enter(ctx, 0);
-	return 0;
-}
-
-SEC("tracepoint/syscalls/sys_enter_clone")
-int tracepoint__syscalls__sys_enter_clone(struct syscall_enter_clone_ctx *ctx)
-{
-	handle_fork_clone_enter((struct syscall_enter_fork_ctx *)ctx,
-				ctx->clone_flags);
 	return 0;
 }
 
