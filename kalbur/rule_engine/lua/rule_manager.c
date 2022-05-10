@@ -254,6 +254,7 @@ static int push_rule_config_table(lua_State *L, char *rule_name)
 	// get the configuration for the given rule
 	// if no configuration is present we skip this file
 	lua_pushstring(L, rule_name);
+	printf("rule name: %s\n", rule_name);
 	lua_gettable(L, -2);
 	if (lua_isnil(L, -1)) {
 		fprintf(stderr,
@@ -511,6 +512,9 @@ int load_lua_scripts(lua_State *L, struct rules_manager *manager)
 		} else {
 			manager->rules_loaded++;
 		}
+
+		// TODO: reset stack
+		lua_settop(L, 0);
 
 		free_rule_config(rc);
 	}
