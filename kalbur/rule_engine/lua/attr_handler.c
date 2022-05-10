@@ -108,13 +108,11 @@ ATTRIBUTE_HANDLER(push_proc_launch_attr)
 			lua_pushnil(L);
 		}
 	} else if (IS_ATTR(attr_name, INTERP)) {
-		if (string_data == NULL)
-			return;
-
-		interp = &string_data[pinfo->interp_str_offset];
-		if (interp[0] != 0) {
+		interp = get_interpreter_string(string_data, pinfo->interp_str_offset);
+		if (interp != NULL) {
 			lua_pushstring(L, interp);
-		} else {
+		}
+		else {
 			lua_pushnil(L);
 		}
 	} else if (IS_ATTR(attr_name, STDIN)) {

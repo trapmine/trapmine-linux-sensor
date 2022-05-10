@@ -18,6 +18,23 @@ static size_t calc_path_sz(char **parts, uint32_t pathlen)
 	return sz + (pathlen * 2);
 }
 
+char *get_interpreter_string(char *string_data, uint32_t offset)
+{
+	char *interp;
+
+	if(string_data == NULL)
+		return NULL;
+
+	if (offset == LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE))
+		return NULL;
+
+	interp = &string_data[offset];
+	if (interp[0] == 0)
+		return NULL;
+
+	return interp;
+}
+
 char *build_cmdline(char *args_data, uint32_t argv_off, unsigned long nbytes)
 {
 	char *args = NULL;
