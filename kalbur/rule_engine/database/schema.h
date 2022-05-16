@@ -168,7 +168,9 @@
 				" DADDR " TEXT, \
 				" DPORT " INTEGER, \
 				" DIRECTION " TEXT, \
-				" SOCK_INODE ", INTEGER \
+				" SOCK_INODE " INTEGER, \
+				FOREIGN KEY(" EVENT_ID                         \
+	") REFERENCES events(" EVENT_ID ")\
 			);"
 
 /* LPE alert table */
