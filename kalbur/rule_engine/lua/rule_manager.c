@@ -513,7 +513,6 @@ int load_lua_scripts(lua_State *L, struct rules_manager *manager)
 			manager->rules_loaded++;
 		}
 
-		// TODO: reset stack
 		lua_settop(L, 0);
 
 		free_rule_config(rc);

@@ -32,7 +32,6 @@ static int execute_bytecode(lua_State *L, char *bytecode, size_t bytecode_sz,
 		return CODE_FAILED;
 	}
 
-	// TODO: reset stack
 	lua_settop(L, 0);
 
 	return CODE_SUCCESS;
