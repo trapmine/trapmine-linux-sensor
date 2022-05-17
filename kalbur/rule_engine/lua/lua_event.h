@@ -14,7 +14,6 @@ struct lua_event {
 	void *ms;
 };
 
-int initialize_event_metatable(lua_State *L);
 void setup_event_context(lua_State *L, struct message_state *ms);
 void teardown_event_context(lua_State *L);
 int init_event_context(lua_State *L);
