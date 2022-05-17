@@ -18,6 +18,7 @@ struct thread_msg {
 	bool ready;
 	bool die;
 	struct msg_list *head;
+	struct lua_engine *rule_engine;
 };
 
 void *consumer(void *arg);

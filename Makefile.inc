@@ -23,6 +23,7 @@ endif
 KALBUR := kalbur
 RULE_ENGINE_DIR := rule_engine
 UTIL := util
+LUA_ENGINE := lua
 DATABASE := database
 
 # Paths
@@ -34,6 +35,8 @@ KALBUR_DIR = $(abspath $(ROOT_DIR)/$(KALBUR))
 ENGINE_DIR = $(KALBUR_DIR)/$(RULE_ENGINE_DIR)
 DATABASE_DIR = $(ENGINE_DIR)/$(DATABASE)
 UTIL_DIR = $(KALBUR_DIR)/$(UTIL)
+LUA_DIR = $(ENGINE_DIR)/$(LUA_ENGINE)
+LUA_LIB_DIR = $(LIB_DIR)/lua
 
 # Libraries
 LIBBPF_OBJ := $(INC_DIR)/libbpf.a
@@ -68,5 +71,5 @@ AIRBUS_SEC_FLAGS := 	-O2 							\
 			-Wl,-z,noexecstack -Wl,-z,separate-code
 
 
-INCLUDES := -I$(INC_DIR) -I$(ROOT_DIR) -I$(KALBUR_DIR) -I$(DATABASE_DIR) -I$(UTIL_DIR) -I$(UAPI) -I$(ENGINE_DIR)
+INCLUDES := -I$(INC_DIR) -I$(ROOT_DIR) -I$(KALBUR_DIR) -I$(DATABASE_DIR) -I$(UTIL_DIR) -I$(UAPI) -I$(ENGINE_DIR) -I$(LUA_DIR)
 CFLAGS ?= $(IMPL_CFLAGS) $(AIRBUS_SEC_FLAGS)

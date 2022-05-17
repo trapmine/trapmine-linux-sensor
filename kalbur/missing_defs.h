@@ -56,6 +56,7 @@
 #define CLONE_PARENT_SETTID 0x00100000 /* set the TID in the parent */
 #define CLONE_PARENT                                                           \
 	0x00008000 /* set if we want to have the same parent as the cloner */
+#define CLONE_THREAD 0x00010000 /* Same thread group */
 
 /* include/linux/stringify */
 #pragma GCC diagnostic push

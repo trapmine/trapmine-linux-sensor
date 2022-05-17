@@ -327,6 +327,16 @@ void delete_message(struct message_state **state)
 	*state = free_message(*state);
 }
 
+void set_ms_event_id(struct message_state *ms, int event_id)
+{
+	ms->event_id = event_id;
+}
+
+void tag_ms(struct message_state *ms, int indx, unsigned long tag)
+{
+	ms->tags[indx] |= tag;
+}
+
 static void transition_progress(struct message_state *ms, uint64_t transition)
 {
 	ms->progress = ms->progress | transition;
@@ -351,7 +361,7 @@ static void transition_end_state(struct message_state *ms)
 		return;
 	}
 
-	if (IS_MS_DB_SAVED(ms)) {
+	if (IS_MS_DB_SAVED(ms) && IS_MS_RULES_PROCESSED(ms)) {
 		transition_progress(ms, MS_GC);
 	}
 }
@@ -374,6 +384,23 @@ static void transition_db_saved(struct message_state *ms, int prog_err)
 	transition_end_state(ms);
 }
 
+static void transition_rules_processed(struct message_state *ms, int prog_err)
+{
+	ASSERT(IS_MS_COMPLETE(ms),
+	       "transition_rules_processed: ms->progress not set to complete");
+
+	ASSERT(VALID_ERR_VAL(prog_err),
+	       "transition_rules_processed: prog_err is not a valid value");
+
+	if (prog_err == CODE_SUCCESS) {
+		transition_progress(ms, MS_RULES_PROCESSED);
+	} else if (prog_err == CODE_FAILED) {
+		transition_progress(ms, MS_GC);
+	}
+
+	transition_end_state(ms);
+}
+
 static void transition_gc_force(struct message_state *ms)
 {
 	transition_progress(ms, MS_GC);
@@ -390,6 +417,9 @@ void transition_ms_progress(struct message_state *ms,
 		break;
 	case MS_DB_SAVED:
 		transition_db_saved(ms, prog_err);
+		break;
+	case MS_RULES_PROCESSED:
+		transition_rules_processed(ms, prog_err);
 		break;
 	case MS_GC:
 		transition_gc_force(ms);

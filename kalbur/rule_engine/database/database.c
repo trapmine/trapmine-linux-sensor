@@ -19,10 +19,10 @@
 #include <hash.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h> // AF_INET, AF_INET6
-#include <arpa/inet.h>
 #include <sys/mman.h>
 #include <helpers.h>
+#include <sys/socket.h> // AF_INET, AF_INET6
+#include <arpa/inet.h>
 #include "database.h"
 
 static void delete_db_file(char *dbname)
@@ -196,7 +196,7 @@ int prepare_sql(sqlite3 *db, hashtable_t *hash_table)
 		err = sqlite3_prepare_v2(db, SQL_STMTS[i].sql,
 					 (int)SQL_STMTS[i].sql_len, &ppStmt,
 					 NULL);
-		if (!ppStmt) {
+		if (err != SQLITE_OK) {
 			fprintf(stderr,
 				"[err:%d:%s] Failed to prepare sql: %s.\n", err,
 				sqlite3_errmsg(db), SQL_STMTS[i].sql);
@@ -506,8 +506,7 @@ int insert_proc_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 	argv_off = pinfo->args.argv_offset;
 	ASSERT(argv_off < PER_CPU_STR_BUFFSIZE,
 	       "insert_proc_info: argv_off >= PER_CPU_STR_BUFFSIZE");
-	if ((pinfo->args.present == 0) ||
-	    argv_off == LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE)) {
+	if (pinfo->args.present == 0) {
 		sqlite3_bind_null(ppStmt, sqlite3_bind_parameter_index(
 						  ppStmt, PARAM_HOLDER(ARGS)));
 	} else {
@@ -524,8 +523,7 @@ int insert_proc_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 	env_off = pinfo->env.env_offset;
 	ASSERT(env_off < PER_CPU_STR_BUFFSIZE,
 	       "insert_proc_info: env_off >= PER_CPU_STR_BUFFSIZE");
-	if ((pinfo->env.present == 0) ||
-	    (env_off == LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE))) {
+	if (pinfo->env.present == 0) {
 		sqlite3_bind_null(ppStmt, sqlite3_bind_parameter_index(
 						  ppStmt, PARAM_HOLDER(ENV)));
 	} else {
@@ -573,8 +571,6 @@ int insert_socket_create_info(sqlite3 *db, hashtable_t *ht,
 	sqlite3_stmt *ppStmt;
 	struct socket_create *sock_info;
 	int err;
-	char family[5] = { 0 };
-	char type[15] = { 0 };
 
 	ppStmt = (sqlite3_stmt *)hash_get(ht, INSERT_SOCKET_CREATE_INFO,
 					  sizeof(INSERT_SOCKET_CREATE_INFO));
@@ -590,34 +586,12 @@ int insert_socket_create_info(sqlite3 *db, hashtable_t *ht,
 	SQLITE3_BIND_INT("insert_socket_create_info", int64, INODE_NUMBER,
 			 sock_info->i_ino);
 
-	switch (sock_info->family) {
-	case AF_INET:
-		memcpy(family, "ipv4", sizeof(family));
-		break;
-	case AF_INET6:
-		memcpy(family, "ipv6", sizeof(family));
-		break;
-	default:
+	char *family = socket_family_str(sock_info->family);
+	if (family == NULL)
 		return CODE_FAILED;
-	}
 
-#define TYPE_STREAM "sock_stream"
-#define TYPE_DGRAM "sock_dgram"
-#define TYPE_RAW "sock_raw"
-#define TYPE_UNDEF "undef"
-	switch (sock_info->type) {
-	case SOCK_STREAM:
-		memcpy(type, TYPE_STREAM, sizeof(TYPE_STREAM));
-		break;
-	case SOCK_DGRAM:
-		memcpy(type, TYPE_DGRAM, sizeof(TYPE_DGRAM));
-		break;
-	case SOCK_RAW:
-		memcpy(type, TYPE_RAW, sizeof(TYPE_RAW));
-		break;
-	default:
-		memcpy(type, TYPE_UNDEF, sizeof(TYPE_UNDEF));
-	}
+	char *type = socket_type_str(sock_info->type);
+	ASSERT(type != NULL, "insert_socket_create_info: type == NULL");
 
 	SQLITE3_BIND_STR("insert_socket_create_info", text, FAMILY, family);
 	SQLITE3_BIND_STR("insert_socket_create_info", text, SOCK_TYPE, type);

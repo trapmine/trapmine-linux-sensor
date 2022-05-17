@@ -44,8 +44,10 @@
 #define IS_EXIT_EVENT(syscall) (syscall == EXIT_EVENT)
 
 #define IS_SOCKET_EVENT(syscall)                                               \
-	((syscall == SYS_SOCKET) || (syscall == SYS_CONNECT) ||                \
+	(IS_SOCKET_CREATE(syscall) || (syscall == SYS_CONNECT) ||              \
 	 (syscall == SYS_ACCEPT))
+
+#define IS_SOCKET_CREATE(syscall) (syscall == SYS_SOCKET)
 
 #define IS_FORK_OR_FRIENDS(syscall)                                            \
 	((syscall == SYS_FORK) || (syscall == SYS_VFORK) ||                    \
