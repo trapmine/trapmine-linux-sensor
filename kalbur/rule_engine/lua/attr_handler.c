@@ -16,14 +16,14 @@
 
 #define IS_ATTR(attr_name, attr) strncmp(attr_name, attr, sizeof(attr)) == 0
 
-#define TGID_PID "pid"
+#define PID "pid"
 #define EVENT_TIME "eventTime"
 #define COMM "processName"
 #define SYSCALL "syscall"
 static int push_event_header_attr(lua_State *L, const char *attr_name,
 				  struct probe_event_header *eh)
 {
-	if (IS_ATTR(attr_name, TGID_PID)) {
+	if (IS_ATTR(attr_name, PID)) {
 		lua_pushinteger(L, (long)(eh->tgid_pid >> 32));
 		return CODE_SUCCESS;
 	} else if (IS_ATTR(attr_name, EVENT_TIME)) {
