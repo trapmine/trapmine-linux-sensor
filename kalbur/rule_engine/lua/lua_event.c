@@ -28,7 +28,7 @@ static int event_index(lua_State *L)
 	}
 
 	ASSERT(event->push_attr != NULL,
-	       "event_index: event->push_att == NULL");
+	       "event_index: event->push_attr == NULL");
 	event->push_attr(L, attr, ms);
 
 	return 1;
