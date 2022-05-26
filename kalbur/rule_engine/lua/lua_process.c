@@ -97,6 +97,9 @@ int process_index(lua_State *L)
 	} else if (IS_ATTR(attr, MMAP_INFO)) {
 		lua_pop(L, 1);
 		get_mmap_info(L);
+	} else if (IS_ATTR(attr, PROCESS_INFO)) {
+		lua_pop(L, 1);
+		get_process_info(L);
 	} else {
 		fprintf(stderr, "process_index: unknown attribute\n");
 		lua_pop(L, 2);

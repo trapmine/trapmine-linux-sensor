@@ -856,11 +856,32 @@ int select_all_process_info(sqlite3 *db, hashtable_t *ht,
 	int err;
 	sqlite3_stmt *ppStmt;
 	u64_t tmp_event_time;
-	u64_t tmp_ppid;
+	u64_t tmp_parent_tgid;
 	int tmp_syscall;
 	const unsigned char *tmp_process_name;
 	int tmp_process_name_len;
 	struct lua_process_info **tmp_values;
+	u64_t tmp_clone_flags;
+	const unsigned char *tmp_args;
+	int tmp_args_len;
+	const unsigned char *tmp_env;
+	int tmp_env_len;
+	const unsigned char *tmp_interpreter;
+	int tmp_interpreter_len;
+	int tmp_uid;
+	int tmp_gid;
+	int tmp_euid;
+	int tmp_egid;
+	int tmp_stdin_inode;
+	int tmp_stdin_type;
+	int tmp_stdout_inode;
+	int tmp_stdout_type;
+	int tmp_stderr_inode;
+	int tmp_stderr_type;
+	const unsigned char *tmp_filename;
+	int tmp_filename_len;
+	u64_t tmp_inode;
+	u64_t tmp_s_magic;
 
 	ASSERT(process_info_arr != NULL,
 	       "select_all_process_info: process_info_arr is NULL");
@@ -907,9 +928,42 @@ int select_all_process_info(sqlite3 *db, hashtable_t *ht,
 			SQLITE3_GET(tmp_event_time, int64, 0);
 			SQLITE3_GET(tmp_syscall, int, 1);
 			SQLITE3_GET(tmp_process_name, text, 2);
-			SQLITE3_GET(tmp_ppid, int64, 3);
+			SQLITE3_GET(tmp_parent_tgid, int64, 3);
+			SQLITE3_GET(tmp_clone_flags, int64, 4);
+			SQLITE3_GET(tmp_args, text, 5);
+			SQLITE3_GET(tmp_env, text, 6);
+			SQLITE3_GET(tmp_interpreter, text, 7);
+			SQLITE3_GET(tmp_uid, int, 8);
+			SQLITE3_GET(tmp_gid, int, 9);
+			SQLITE3_GET(tmp_euid, int, 10);
+			SQLITE3_GET(tmp_egid, int, 11);
+			SQLITE3_GET(tmp_stdin_inode, int, 12);
+			SQLITE3_GET(tmp_stdin_type, int, 13);
+			SQLITE3_GET(tmp_stdout_inode, int, 14);
+			SQLITE3_GET(tmp_stdout_type, int, 15);
+			SQLITE3_GET(tmp_stderr_inode, int, 16);
+			SQLITE3_GET(tmp_stderr_type, int, 17);
+			SQLITE3_GET(tmp_filename, text, 18);
+			SQLITE3_GET(tmp_inode, int64, 19);
+			SQLITE3_GET(tmp_s_magic, int64, 20);
 			tmp_process_name_len =
 				(int)strlen((const char *)tmp_process_name) + 1;
+
+			if (tmp_args == NULL) {
+				tmp_args = "";
+			}
+			tmp_args_len = (int)strlen((const char *)tmp_args) + 1;
+			if (tmp_env == NULL) {
+				tmp_env = "";
+			}
+			tmp_env_len = (int)strlen((const char *)tmp_env) + 1;
+			if (tmp_interpreter == NULL) {
+				tmp_interpreter = "";
+			}
+			tmp_interpreter_len =
+				(int)strlen((const char *)tmp_interpreter) + 1;
+			tmp_filename_len =
+				(int)strlen((const char *)tmp_filename) + 1;
 
 			process_info_arr->values[process_info_arr->size - 1] =
 				(struct lua_process_info *)malloc(
@@ -920,17 +974,79 @@ int select_all_process_info(sqlite3 *db, hashtable_t *ht,
 			process_info_arr->values[process_info_arr->size - 1]
 				->event_info->process_name = (char *)malloc(
 				(sizeof(char) * (size_t)tmp_process_name_len));
-			process_info_arr->values[process_info_arr->size - 1]
-				->event_info->event_time = tmp_event_time;
-			process_info_arr->values[process_info_arr->size - 1]
-				->event_info->syscall = tmp_syscall;
-			process_info_arr->values[process_info_arr->size - 1]
-				->ppid = tmp_ppid;
 			strlcpy(process_info_arr
 					->values[process_info_arr->size - 1]
 					->event_info->process_name,
 				(const char *)tmp_process_name,
 				(size_t)tmp_process_name_len);
+			process_info_arr->values[process_info_arr->size - 1]
+				->event_info->event_time = tmp_event_time;
+			process_info_arr->values[process_info_arr->size - 1]
+				->event_info->syscall = tmp_syscall;
+
+			process_info_arr->values[process_info_arr->size - 1]
+				->parent_tgid = tmp_parent_tgid;
+			process_info_arr->values[process_info_arr->size - 1]
+				->args = (char *)malloc(
+				(sizeof(char) * (size_t)tmp_args_len));
+			strlcpy(process_info_arr
+					->values[process_info_arr->size - 1]
+					->args,
+				(const char *)tmp_args, (size_t)tmp_args_len);
+			process_info_arr->values[process_info_arr->size - 1]
+				->env = (char *)malloc(
+				(sizeof(char) * (size_t)tmp_env_len));
+			strlcpy(process_info_arr
+					->values[process_info_arr->size - 1]
+					->env,
+				(const char *)tmp_env, (size_t)tmp_env_len);
+			process_info_arr->values[process_info_arr->size - 1]
+				->interpreter = (char *)malloc(
+				(sizeof(char) * (size_t)tmp_interpreter_len));
+			strlcpy(process_info_arr
+					->values[process_info_arr->size - 1]
+					->interpreter,
+				(const char *)tmp_interpreter,
+				(size_t)tmp_interpreter_len);
+
+			process_info_arr->values[process_info_arr->size - 1]
+				->clone_flags = tmp_clone_flags;
+			process_info_arr->values[process_info_arr->size - 1]
+				->uid = tmp_uid;
+			process_info_arr->values[process_info_arr->size - 1]
+				->gid = tmp_gid;
+			process_info_arr->values[process_info_arr->size - 1]
+				->euid = tmp_euid;
+			process_info_arr->values[process_info_arr->size - 1]
+				->egid = tmp_egid;
+			process_info_arr->values[process_info_arr->size - 1]
+				->stdin_inode = tmp_stdin_inode;
+			process_info_arr->values[process_info_arr->size - 1]
+				->stdout_inode = tmp_stdout_inode;
+			process_info_arr->values[process_info_arr->size - 1]
+				->stderr_inode = tmp_stderr_inode;
+			process_info_arr->values[process_info_arr->size - 1]
+				->stdin_type = tmp_stdin_type;
+			process_info_arr->values[process_info_arr->size - 1]
+				->stdout_type = tmp_stdout_type;
+			process_info_arr->values[process_info_arr->size - 1]
+				->stderr_type = tmp_stderr_type;
+
+			process_info_arr->values[process_info_arr->size - 1]
+				->file_info = (struct lua_file_info *)malloc(
+				sizeof(struct lua_file_info));
+			process_info_arr->values[process_info_arr->size - 1]
+				->file_info->filename = (char *)malloc(
+				(sizeof(char) * (size_t)tmp_filename_len));
+			strlcpy(process_info_arr
+					->values[process_info_arr->size - 1]
+					->file_info->filename,
+				(const char *)tmp_filename,
+				(size_t)tmp_filename_len);
+			process_info_arr->values[process_info_arr->size - 1]
+				->file_info->inode = tmp_inode;
+			process_info_arr->values[process_info_arr->size - 1]
+				->file_info->s_magic = tmp_s_magic;
 		}
 	}
 

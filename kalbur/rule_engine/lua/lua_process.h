@@ -17,6 +17,7 @@
 
 #define GLOBAL_LUA_DB "SENSOR_DB"
 #define GLOBAL_PID_LIST "SENSOR_PID_LIST"
+#define PROCESS_METATABLE "ProcessMetaTable"
 
 #define IS_ATTR(attr_name, attr) strncmp(attr_name, attr, sizeof(attr)) == 0
 
