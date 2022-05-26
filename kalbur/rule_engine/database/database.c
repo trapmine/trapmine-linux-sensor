@@ -281,6 +281,8 @@ int insert_event(sqlite3 *db, hashtable_t *ht, struct probe_event_header *eh)
 	sqlite3_stmt *ppStmt;
 	int err;
 	int event_id;
+	u64_t tgid;
+	u64_t pid;
 
 	ppStmt = hash_get(ht, INSERT_EVENT, sizeof(INSERT_EVENT));
 	if (ppStmt == NULL) {
@@ -289,8 +291,12 @@ int insert_event(sqlite3 *db, hashtable_t *ht, struct probe_event_header *eh)
 		return CODE_FAILED;
 	}
 
+	tgid = (eh->tgid_pid >> 32) & 0xFFFFFFFF;
+	pid = eh->tgid_pid & 0xFFFFFFFF;
+
 	SQLITE3_BIND_INT("insert_event", int64, EVENT_TIME, eh->event_time);
-	SQLITE3_BIND_INT("insert_event", int64, TGID_PID, eh->tgid_pid);
+	SQLITE3_BIND_INT("insert_event", int64, TGID, tgid);
+	SQLITE3_BIND_INT("insert_event", int64, PID, pid);
 	SQLITE3_BIND_INT("insert_event", int, SYSCALL, eh->syscall_nr);
 	SQLITE3_BIND_STR("insert_event", text, COMM, eh->comm);
 
@@ -475,7 +481,8 @@ int insert_proc_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 
 	SQLITE3_BIND_INT("insert_proc_info", int, EVENT_ID, event_id);
 	SQLITE3_BIND_INT("insert_proc_info", int, FILE_ID, file_id);
-	SQLITE3_BIND_INT("insert_proc_info", int64, PPID, pinfo->ppid);
+	SQLITE3_BIND_INT("insert_proc_info", int64, PARENT_TGID, (pinfo->ppid >> 32) & 0xFFFFFFFF);
+	SQLITE3_BIND_INT("insert_proc_info", int64, PARENT_PID, pinfo->ppid & 0xFFFFFFFF);
 	SQLITE3_BIND_INT("insert_proc_info", int, UID, pinfo->credentials.uid);
 	SQLITE3_BIND_INT("insert_proc_info", int, GID, pinfo->credentials.gid);
 	SQLITE3_BIND_INT("insert_proc_info", int, EUID,

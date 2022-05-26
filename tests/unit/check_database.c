@@ -225,7 +225,8 @@ int validate_callback__insert_event(void *eh_in, int n, char **vals,
 					l, eh->event_time);
 				return 1;
 			}
-		} else if (strcmp(names[i], TGID_PID) == 0) {
+		} else if (strcmp(names[i], TGID) == 0) {
+			// TODO: fix this test for TGID & PID
 			l = strtol(vals[i], NULL, 10);
 			if (l == 0) {
 				fprintf(stderr,
@@ -570,6 +571,7 @@ int validate_callback__insert_proc_info(void *msg_in, int n, char **vals,
 	char *args = NULL;
 
 	for (int i = 0; i < n; i++) {
+		// TODO: Fix the test as ppid is split in two columns
 		if (strcmp(names[i], PPID) == 0) {
 			l = strtol(vals[i], NULL, 10);
 			if (l == 0) {

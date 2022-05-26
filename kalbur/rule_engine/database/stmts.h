@@ -42,11 +42,12 @@ const char *CREATE_STMTS[] = {
 // #### SQL STATEMENTS ####
 // ########################
 
-unsigned char INSERT_EVENT[] = "INSERT INTO events(\
-				" EVENT_TIME "," TGID_PID "," SYSCALL "," COMM
-			       ") \
-				VALUES(:" EVENT_TIME ",:" TGID_PID ",:" SYSCALL
-			       ",:" COMM ") RETURNING " EVENT_ID ";";
+unsigned char INSERT_EVENT[] =
+	"INSERT INTO events(\
+				" EVENT_TIME "," TGID "," PID "," SYSCALL
+	"," COMM ") \
+				VALUES(:" EVENT_TIME ",:" TGID ",:" PID
+	",:" SYSCALL ",:" COMM ") RETURNING " EVENT_ID ";";
 
 unsigned char INSERT_FILE_INFO[] = "INSERT INTO file_info(\
 					" FILENAME "," INODE_NUMBER "," S_MAGIC
@@ -65,14 +66,14 @@ unsigned char INSERT_PROC_MMAP[] = "INSERT INTO proc_mmap(\
 
 unsigned char INSERT_PROCESS_INFO[] =
 	"INSERT INTO process_info(\
-					" EVENT_ID "," PPID "," CLONE_FLAGS
+					" EVENT_ID "," PARENT_TGID "," PARENT_PID "," CLONE_FLAGS
 	"," FILE_ID "," ARGS "," ENV "," INTERPRETER "," UID "," GID "," EUID
 	"," EGID "," STDIN_INODE "," STDIN_TYPE "," STDOUT_INODE "," STDOUT_TYPE
-	"," STDERR_INODE "," STDERR_TYPE ") VALUES(:" EVENT_ID ",:" PPID
-	",:" CLONE_FLAGS ",:" FILE_ID ",:" ARGS ",:" ENV ",:" INTERPRETER
-	",:" UID ",:" GID ",:" EUID ",:" EGID ",:" STDIN_INODE ",:" STDIN_TYPE
-	",:" STDOUT_INODE ",:" STDOUT_TYPE ",:" STDERR_INODE ",:" STDERR_TYPE
-	");";
+	"," STDERR_INODE "," STDERR_TYPE ") VALUES(:" EVENT_ID ",:" PARENT_TGID
+	",:" PARENT_PID ",:" CLONE_FLAGS ",:" FILE_ID ",:" ARGS ",:" ENV
+	",:" INTERPRETER ",:" UID ",:" GID ",:" EUID ",:" EGID ",:" STDIN_INODE
+	",:" STDIN_TYPE ",:" STDOUT_INODE ",:" STDOUT_TYPE ",:" STDERR_INODE 
+	",:" STDERR_TYPE ");";
 
 unsigned char INSERT_SOCKET_CREATE_INFO[] =
 	"INSERT INTO socket_create_info(\
@@ -133,15 +134,16 @@ unsigned char SELECT_STDIN_BY_STDOUT[] =
 	" from process_info WHERE " STDIN_INODE " = :" STDIN_INODE ";";
 
 unsigned char SELECT_TGID_BY_EVENT_ID[] =
-	"SELECT " TGID_PID " from events WHERE " EVENT_ID " = :" EVENT_ID ";";
+	"SELECT " TGID ", " PID " from events WHERE " EVENT_ID " = :" EVENT_ID
+	";";
 
 unsigned char SELECT_IF_SOCK_CONN_EXISTS[] =
-	"SELECT " EVENT_ID " FROM events WHERE " TGID_PID " = :" TGID_PID
-	" and syscall = 41;";
+	"SELECT " EVENT_ID " FROM events WHERE " TGID " = :" TGID " AND " PID
+	" = :" PID " and syscall = 41;";
 
 unsigned char SELECT_EVENT_IDS_BY_TGID[] =
-	"SELECT " EVENT_ID " FROM events where TGID_PID = :" TGID_PID
-	" and (syscall = 9 or syscall = 59);";
+	"SELECT " EVENT_ID " FROM events where " TGID " = :" TGID " AND " PID
+	" = :" PID " and (syscall = 9 or syscall = 59);";
 
 unsigned char SELECT_VM_INFO_BY_EVENT_ID[] =
 	"SELECT " VM_BASE ", " VM_LEN ", " VM_PROT
