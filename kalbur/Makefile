@@ -35,6 +35,7 @@ RULE_ENGINE = $(DATABASE_DIR)/database.o \
 			$(LUA_DIR)/lua_file_info.o \
 			$(LUA_DIR)/lua_process_info.o \
 			$(LUA_DIR)/lua_mmap_info.o \
+			$(LUA_DIR)/lua_ptrace_info.o \
 
 HELPERS = $(HASH) $(RULE_ENGINE) $(SYMSEARCH) $(HELPERS_FN) $(SAFE)
 SQLITE3 = $(INC_DIR)/sqlite3.o

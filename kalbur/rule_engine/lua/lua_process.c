@@ -100,6 +100,9 @@ int process_index(lua_State *L)
 	} else if (IS_ATTR(attr, PROCESS_INFO)) {
 		lua_pop(L, 1);
 		get_process_info(L);
+	} else if (IS_ATTR(attr, PTRACE_INFO)) {
+		lua_pop(L, 1);
+		get_ptrace_info(L);
 	} else {
 		fprintf(stderr, "process_index: unknown attribute\n");
 		lua_pop(L, 2);
@@ -181,11 +184,11 @@ int get_process_by_pid(lua_State *L)
 		process_context->pid = pid;
 		process_context->process_info_arr = NULL;
 		process_context->mmap_info_arr = NULL;
+		process_context->ptrace_info_arr = NULL;
 	}
 
 	// sanity checks
 	ASSERT(process_context->pid == pid, "");
-	ASSERT(process_context->mmap_info_arr == NULL, "");
 
 	// get REGISTRY[GLOBAL_PID_LIST][pid]
 	get_global_pid(L, pid);
@@ -289,6 +292,7 @@ void teardown_process_context(lua_State *L)
 		delete_lua_process_info_array(
 			process_context->process_info_arr);
 		delete_lua_mmap_info_array(process_context->mmap_info_arr);
+		delete_lua_ptrace_info_array(process_context->ptrace_info_arr);
 
 		lua_pop(L, 1);
 	}

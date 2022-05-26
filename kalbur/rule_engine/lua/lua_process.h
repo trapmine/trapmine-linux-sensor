@@ -14,6 +14,7 @@
 #include "lua_file_info.h"
 #include "lua_process_info.h"
 #include "lua_mmap_info.h"
+#include "lua_ptrace_info.h"
 
 #define GLOBAL_LUA_DB "SENSOR_DB"
 #define GLOBAL_PID_LIST "SENSOR_PID_LIST"
@@ -33,6 +34,7 @@ struct lua_process_context {
 	int pid;
 	struct lua_process_info_array *process_info_arr;
 	struct lua_mmap_info_array *mmap_info_arr;
+	struct lua_ptrace_info_array *ptrace_info_arr;
 };
 
 struct lua_db *get_lua_db(lua_State *L);

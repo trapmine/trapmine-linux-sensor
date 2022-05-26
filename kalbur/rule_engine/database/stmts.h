@@ -94,8 +94,9 @@ unsigned char INSERT_LPE_INFO[] =
 	") VALUES (:" EVENT_ID ",:" CALLER_RET_ADDR ",:" TARGET_FUNC ");";
 
 unsigned char INSERT_PTRACE_INFO[] =
-	"INSERT INTO ptrace_event(" EVENT_ID "," REQUEST "," ADDR "," TARGET
-	") VALUES(:" EVENT_ID ",:" REQUEST ",:" ADDR ",:" TARGET ");";
+	"INSERT INTO ptrace_event(" EVENT_ID "," REQUEST "," ADDR
+	"," TARGET_TGID "," TARGET_PID ") VALUES(:" EVENT_ID ",:" REQUEST
+	",:" ADDR ",:" TARGET_TGID ",:" TARGET_PID ");";
 
 unsigned char INSERT_MODULE_INFO[] =
 	"INSERT INTO module_load(" EVENT_ID "," FILE_ID ") VALUES(:" EVENT_ID
@@ -174,6 +175,12 @@ unsigned char SELECT_MMAP_INFO[] =
 	" ON E1." EVENT_ID " = E2." EVENT_ID " JOIN file_info E3 ON E2." FILE_ID
 	" = E3." FILE_ID " WHERE E1." TGID " = :" TGID ";";
 
+unsigned char SELECT_PTRACE_INFO[] =
+	"SELECT E1." EVENT_TIME ", E1." SYSCALL ", E1." COMM ", E2." REQUEST
+	", E2." ADDR ", E2." TARGET_TGID " FROM events E1"
+	" JOIN ptrace_event E2 ON E1." EVENT_ID " = E2." EVENT_ID " WHERE"
+	" E1." TGID " = :" TGID ";";
+
 unsigned char BEGIN_STMT[] = "BEGIN;";
 unsigned char ROLLBACK_STMT[] = "ROLLBACK;";
 unsigned char COMMIT_STMT[] = "COMMIT;";
@@ -214,6 +221,7 @@ const stmt_t SQL_STMTS[] = {
 	// Join statements
 	{ SELECT_PROCESS_INFO, sizeof(SELECT_PROCESS_INFO) },
 	{ SELECT_MMAP_INFO, sizeof(SELECT_MMAP_INFO) },
+	{ SELECT_PTRACE_INFO, sizeof(SELECT_PTRACE_INFO) },
 	// Misc sql statements
 	{ ROLLBACK_STMT, sizeof(ROLLBACK_STMT) },
 	{ COMMIT_STMT, sizeof(COMMIT_STMT) },

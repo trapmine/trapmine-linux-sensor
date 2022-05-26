@@ -766,6 +766,8 @@ int insert_ptrace_event(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 	sqlite3_stmt *ppStmt;
 	struct ptrace_event_info *ptrace_info;
 	int err;
+	u64_t target_tgid;
+	u64_t target_pid;
 
 	ppStmt = (sqlite3_stmt *)hash_get(ht, INSERT_PTRACE_INFO,
 					  sizeof(INSERT_PTRACE_INFO));
@@ -776,12 +778,16 @@ int insert_ptrace_event(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 	}
 
 	ptrace_info = (struct ptrace_event_info *)ms->primary_data;
+	target_tgid = (ptrace_info->target_tgid_pid >> 32) & 0xFFFFFFFF;
+	target_pid = ptrace_info->target_tgid_pid & 0xFFFFFFFF;
+
 	SQLITE3_BIND_INT("insert_ptrace_event", int, EVENT_ID, event_id);
 	SQLITE3_BIND_INT("insert_ptrace_event", int64, REQUEST,
 			 ptrace_info->request);
 	SQLITE3_BIND_INT("insert_ptrace_event", int64, ADDR, ptrace_info->addr);
-	SQLITE3_BIND_INT("insert_ptrace_event", int64, TARGET,
-			 ptrace_info->target_tgid_pid);
+	SQLITE3_BIND_INT("insert_ptrace_event", int64, TARGET_TGID,
+			 target_tgid);
+	SQLITE3_BIND_INT("insert_ptrace_event", int64, TARGET_PID, target_pid);
 
 	err = sqlite3_step(ppStmt);
 	err = err == SQLITE_DONE ? CODE_SUCCESS : CODE_RETRY;
@@ -1129,7 +1135,6 @@ int select_all_mmap_info(sqlite3 *db, hashtable_t *ht,
 			SQLITE3_GET(tmp_vm_len, int64, 6);
 
 			SQLITE3_GET(tmp_filename, text, 7);
-			// tmp_filename = sqlite3_column_text(ppStmt, 10);
 			tmp_filename_len =
 				(int)strlen((const char *)tmp_filename) + 1;
 			SQLITE3_GET(tmp_inode, int64, 8);
@@ -1176,6 +1181,108 @@ int select_all_mmap_info(sqlite3 *db, hashtable_t *ht,
 				->file_info->inode = tmp_inode;
 			mmap_info_arr->values[mmap_info_arr->size - 1]
 				->file_info->s_magic = tmp_s_magic;
+		}
+	}
+
+	err = err == SQLITE_DONE ? CODE_SUCCESS : CODE_FAILED;
+
+	sqlite3_clear_bindings(ppStmt);
+	sqlite3_reset(ppStmt);
+
+	return err;
+}
+
+int select_all_ptrace_info(sqlite3 *db, hashtable_t *ht,
+			   lua_ptrace_info_array *ptrace_info_arr, int tgid)
+{
+	int err;
+	sqlite3_stmt *ppStmt;
+	u64_t tmp_event_time;
+	u64_t tmp_request;
+	u64_t tmp_addr;
+	u64_t tmp_target_tgid;
+	int tmp_syscall;
+	const unsigned char *tmp_process_name;
+	int tmp_process_name_len;
+	struct lua_ptrace_info **tmp_values;
+
+	ASSERT(ptrace_info_arr != NULL,
+	       "select_all_ptrace_info: ptrace_info_arr is NULL");
+	ASSERT(ptrace_info_arr->values != NULL,
+	       "select_all_ptrace_info: ptrace_info_arr->values is NULL");
+	ASSERT(ptrace_info_arr->size == 0,
+	       "select_all_ptrace_info: ptrace_info_arr is non-empty");
+
+	ppStmt = (sqlite3_stmt *)hash_get(ht, SELECT_PTRACE_INFO,
+					  sizeof(SELECT_PTRACE_INFO));
+	if (ppStmt == NULL) {
+		fprintf(stderr,
+			"select_all_ptrace_info: Failed to acquire prepared statement from hashmap.\n");
+		return CODE_FAILED;
+	}
+
+	SQLITE3_BIND_INT("select_all_ptrace_info", int, TGID, tgid);
+
+	while (true) {
+		err = sqlite3_step(ppStmt);
+		if (err != SQLITE_ROW) {
+			break;
+		}
+		if (err == SQLITE_ROW) {
+			if (ptrace_info_arr->size ==
+			    ptrace_info_arr->max_size) {
+				ptrace_info_arr->max_size +=
+					PROCESS_INFO_CHUNK_SIZE;
+				tmp_values =
+					realloc(ptrace_info_arr->values,
+						sizeof(struct process_info) *
+							(size_t)ptrace_info_arr
+								->max_size);
+				if (tmp_values == NULL) {
+					fprintf(stderr,
+						"select_all_ptrace_info: Failed to realloc memory for ptrace_info_arr->values\n");
+					sqlite3_clear_bindings(ppStmt);
+					sqlite3_reset(ppStmt);
+					return CODE_FAILED;
+				}
+				ptrace_info_arr->values = tmp_values;
+			}
+			ptrace_info_arr->size += 1;
+			SQLITE3_GET(tmp_event_time, int64, 0);
+			SQLITE3_GET(tmp_syscall, int, 1);
+			SQLITE3_GET(tmp_process_name, text, 2);
+			tmp_process_name_len =
+				(int)strlen((const char *)tmp_process_name) + 1;
+
+			SQLITE3_GET(tmp_request, int64, 3);
+			SQLITE3_GET(tmp_addr, int64, 4);
+			SQLITE3_GET(tmp_target_tgid, int64, 5);
+
+			ptrace_info_arr->values[ptrace_info_arr->size - 1] =
+				(struct lua_ptrace_info *)malloc(
+					sizeof(struct lua_ptrace_info));
+			ptrace_info_arr->values[ptrace_info_arr->size - 1]
+				->event_info = (struct lua_event_info *)malloc(
+				sizeof(struct lua_event_info));
+			ptrace_info_arr->values[ptrace_info_arr->size - 1]
+				->event_info->process_name = (char *)malloc(
+				(sizeof(char) * (size_t)tmp_process_name_len));
+			ptrace_info_arr->values[ptrace_info_arr->size - 1]
+				->event_info->event_time = tmp_event_time;
+			ptrace_info_arr->values[ptrace_info_arr->size - 1]
+				->event_info->syscall = tmp_syscall;
+			strlcpy(ptrace_info_arr
+					->values[ptrace_info_arr->size - 1]
+					->event_info->process_name,
+				(const char *)tmp_process_name,
+				(size_t)tmp_process_name_len);
+
+			ptrace_info_arr->values[ptrace_info_arr->size - 1]
+				->request = tmp_request;
+			ptrace_info_arr->values[ptrace_info_arr->size - 1]
+				->addr = tmp_addr;
+			ptrace_info_arr->values[ptrace_info_arr->size - 1]
+				->target_tgid = tmp_target_tgid;
 		}
 	}
 

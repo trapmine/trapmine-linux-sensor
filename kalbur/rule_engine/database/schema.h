@@ -99,10 +99,11 @@
 
 #define PROCESS_INFO_TABLE                                                     \
 	"CREATE TABLE process_info(						\
-		" EVENT_ID " INTEGER PRIMARY KEY, 				\
-		" PARENT_TGID                                                         \
+		" EVENT_ID                                                     \
+	" INTEGER PRIMARY KEY, 				\
+		" PARENT_TGID                                                  \
 	" UINT64_T,						\
-		" PARENT_PID                                                         \
+		" PARENT_PID                                                   \
 	" UINT64_T,						\
 		" CLONE_FLAGS                                                  \
 	" UINT64_T, 					\
@@ -192,14 +193,16 @@
 /* ptrace event table */
 #define REQUEST "request"
 #define ADDR "address"
-#define TARGET "target_tgid_pid"
+#define TARGET_TGID "target_tgid"
+#define TARGET_PID "target_pid"
 
 #define PTRACE_TABLE                                                           \
 	"CREATE table ptrace_event(\
 			" EVENT_ID " INTEGER PRIMARY KEY, \
 			" REQUEST " UINT64_T,\
 			" ADDR " UINT64_T,\
-			" TARGET " UINT64_T,\
+			" TARGET_TGID " UINT64_T,\
+			" TARGET_PID " UINT64_T,\
 			FOREIGN KEY(" EVENT_ID ") REFERENCES events(" EVENT_ID \
 	")\
 			);"
