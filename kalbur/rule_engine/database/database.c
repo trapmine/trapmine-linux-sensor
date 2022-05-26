@@ -847,3 +847,212 @@ int insert_modprobe_overwrite_info(sqlite3 *db, hashtable_t *ht,
 
 	return err;
 }
+
+int select_all_process_info(sqlite3 *db, hashtable_t *ht,
+			    lua_process_info_array *process_info_arr, int tgid)
+{
+	int err;
+	sqlite3_stmt *ppStmt;
+	u64_t tmp_event_time;
+	u64_t tmp_ppid;
+	int tmp_syscall;
+	const unsigned char *tmp_process_name;
+	int tmp_process_name_len;
+	struct lua_process_info **tmp_values;
+
+	ASSERT(process_info_arr != NULL,
+	       "select_all_process_info: process_info_arr is NULL");
+	ASSERT(process_info_arr->values != NULL,
+	       "select_all_process_info: process_info_arr->values is NULL");
+	ASSERT(process_info_arr->size == 0,
+	       "select_all_process_info: process_info_arr is non-empty");
+
+	ppStmt = (sqlite3_stmt *)hash_get(ht, SELECT_PROCESS_INFO,
+					  sizeof(SELECT_PROCESS_INFO));
+	if (ppStmt == NULL) {
+		fprintf(stderr,
+			"select_all_process_info: Failed to acquire prepared statement from hashmap.\n");
+		return CODE_FAILED;
+	}
+
+	SQLITE3_BIND_INT("select_all_process_info", int, TGID, tgid);
+
+	while (true) {
+		err = sqlite3_step(ppStmt);
+		if (err != SQLITE_ROW) {
+			break;
+		}
+		if (err == SQLITE_ROW) {
+			if (process_info_arr->size ==
+			    process_info_arr->max_size) {
+				process_info_arr->max_size +=
+					PROCESS_INFO_CHUNK_SIZE;
+				tmp_values =
+					realloc(process_info_arr->values,
+						sizeof(struct process_info) *
+							(size_t)process_info_arr
+								->max_size);
+				if (tmp_values == NULL) {
+					fprintf(stderr,
+						"select_all_process_info: Failed to realloc memory for process_info_arr->values\n");
+					sqlite3_clear_bindings(ppStmt);
+					sqlite3_reset(ppStmt);
+					return CODE_FAILED;
+				}
+				process_info_arr->values = tmp_values;
+			}
+			process_info_arr->size += 1;
+			SQLITE3_GET(tmp_event_time, int64, 0);
+			SQLITE3_GET(tmp_syscall, int, 1);
+			SQLITE3_GET(tmp_process_name, text, 2);
+			SQLITE3_GET(tmp_ppid, int64, 3);
+			tmp_process_name_len =
+				(int)strlen((const char *)tmp_process_name) + 1;
+
+			process_info_arr->values[process_info_arr->size - 1] =
+				(struct lua_process_info *)malloc(
+					sizeof(struct lua_process_info));
+			process_info_arr->values[process_info_arr->size - 1]
+				->event_info = (struct lua_event_info *)malloc(
+				sizeof(struct lua_event_info));
+			process_info_arr->values[process_info_arr->size - 1]
+				->event_info->process_name = (char *)malloc(
+				(sizeof(char) * (size_t)tmp_process_name_len));
+			process_info_arr->values[process_info_arr->size - 1]
+				->event_info->event_time = tmp_event_time;
+			process_info_arr->values[process_info_arr->size - 1]
+				->event_info->syscall = tmp_syscall;
+			process_info_arr->values[process_info_arr->size - 1]
+				->ppid = tmp_ppid;
+			strlcpy(process_info_arr
+					->values[process_info_arr->size - 1]
+					->event_info->process_name,
+				(const char *)tmp_process_name,
+				(size_t)tmp_process_name_len);
+		}
+	}
+
+	err = err == SQLITE_DONE ? CODE_SUCCESS : CODE_FAILED;
+
+	sqlite3_clear_bindings(ppStmt);
+	sqlite3_reset(ppStmt);
+
+	return err;
+}
+
+int select_all_mmap_info(sqlite3 *db, hashtable_t *ht,
+			 lua_mmap_info_array *mmap_info_arr, int tgid)
+{
+	int err;
+	sqlite3_stmt *ppStmt;
+	u64_t tmp_event_time;
+	u64_t tmp_vm_base;
+	int tmp_syscall;
+	const unsigned char *tmp_process_name;
+	int tmp_process_name_len;
+	const unsigned char *tmp_filename;
+	int tmp_filename_len;
+	u64_t tmp_inode;
+	u64_t tmp_s_magic;
+	struct lua_mmap_info **tmp_values;
+
+	ASSERT(mmap_info_arr != NULL,
+	       "select_all_mmap_info: mmap_info_arr is NULL");
+	ASSERT(mmap_info_arr->values != NULL,
+	       "select_all_mmap_info: mmap_info_arr->values is NULL");
+	ASSERT(mmap_info_arr->size == 0,
+	       "select_all_mmap_info: mmap_info_arr is non-empty");
+
+	ppStmt = (sqlite3_stmt *)hash_get(ht, SELECT_MMAP_INFO,
+					  sizeof(SELECT_MMAP_INFO));
+	if (ppStmt == NULL) {
+		fprintf(stderr,
+			"select_all_mmap_info: Failed to acquire prepared statement from hashmap.\n");
+		return CODE_FAILED;
+	}
+
+	SQLITE3_BIND_INT("select_all_mmap_info", int, TGID, tgid);
+
+	while (true) {
+		err = sqlite3_step(ppStmt);
+		if (err != SQLITE_ROW) {
+			break;
+		}
+		if (err == SQLITE_ROW) {
+			if (mmap_info_arr->size == mmap_info_arr->max_size) {
+				mmap_info_arr->max_size +=
+					PROCESS_INFO_CHUNK_SIZE;
+				tmp_values = realloc(
+					mmap_info_arr->values,
+					sizeof(struct process_info) *
+						(size_t)mmap_info_arr->max_size);
+				if (tmp_values == NULL) {
+					fprintf(stderr,
+						"select_all_mmap_info: Failed to realloc memory for mmap_info_arr->values\n");
+					sqlite3_clear_bindings(ppStmt);
+					sqlite3_reset(ppStmt);
+					return CODE_FAILED;
+				}
+				mmap_info_arr->values = tmp_values;
+			}
+			mmap_info_arr->size += 1;
+			SQLITE3_GET(tmp_event_time, int64, 0);
+			SQLITE3_GET(tmp_syscall, int, 1);
+			SQLITE3_GET(tmp_process_name, text, 2);
+			tmp_process_name_len =
+				(int)strlen((const char *)tmp_process_name) + 1;
+
+			SQLITE3_GET(tmp_vm_base, int64, 3);
+
+			SQLITE3_GET(tmp_filename, text, 7);
+			// tmp_filename = sqlite3_column_text(ppStmt, 10);
+			tmp_filename_len =
+				(int)strlen((const char *)tmp_filename) + 1;
+			SQLITE3_GET(tmp_inode, int64, 8);
+			SQLITE3_GET(tmp_s_magic, int64, 9);
+
+			mmap_info_arr->values[mmap_info_arr->size - 1] =
+				(struct lua_mmap_info *)malloc(
+					sizeof(struct lua_mmap_info));
+			mmap_info_arr->values[mmap_info_arr->size - 1]
+				->event_info = (struct lua_event_info *)malloc(
+				sizeof(struct lua_event_info));
+			mmap_info_arr->values[mmap_info_arr->size - 1]
+				->event_info->process_name = (char *)malloc(
+				(sizeof(char) * (size_t)tmp_process_name_len));
+			mmap_info_arr->values[mmap_info_arr->size - 1]
+				->event_info->event_time = tmp_event_time;
+			mmap_info_arr->values[mmap_info_arr->size - 1]
+				->event_info->syscall = tmp_syscall;
+			strlcpy(mmap_info_arr->values[mmap_info_arr->size - 1]
+					->event_info->process_name,
+				(const char *)tmp_process_name,
+				(size_t)tmp_process_name_len);
+
+			mmap_info_arr->values[mmap_info_arr->size - 1]->vm_base =
+				tmp_vm_base;
+
+			mmap_info_arr->values[mmap_info_arr->size - 1]
+				->file_info = (struct lua_file_info *)malloc(
+				sizeof(struct lua_file_info));
+			mmap_info_arr->values[mmap_info_arr->size - 1]
+				->file_info->filename = (char *)malloc(
+				(sizeof(char) * (size_t)tmp_filename_len));
+			strlcpy(mmap_info_arr->values[mmap_info_arr->size - 1]
+					->file_info->filename,
+				(const char *)tmp_filename,
+				(size_t)tmp_filename_len);
+			mmap_info_arr->values[mmap_info_arr->size - 1]
+				->file_info->inode = tmp_inode;
+			mmap_info_arr->values[mmap_info_arr->size - 1]
+				->file_info->s_magic = tmp_s_magic;
+		}
+	}
+
+	err = err == SQLITE_DONE ? CODE_SUCCESS : CODE_FAILED;
+
+	sqlite3_clear_bindings(ppStmt);
+	sqlite3_reset(ppStmt);
+
+	return err;
+}

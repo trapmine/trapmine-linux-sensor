@@ -66,14 +66,15 @@ unsigned char INSERT_PROC_MMAP[] = "INSERT INTO proc_mmap(\
 
 unsigned char INSERT_PROCESS_INFO[] =
 	"INSERT INTO process_info(\
-					" EVENT_ID "," PARENT_TGID "," PARENT_PID "," CLONE_FLAGS
-	"," FILE_ID "," ARGS "," ENV "," INTERPRETER "," UID "," GID "," EUID
-	"," EGID "," STDIN_INODE "," STDIN_TYPE "," STDOUT_INODE "," STDOUT_TYPE
-	"," STDERR_INODE "," STDERR_TYPE ") VALUES(:" EVENT_ID ",:" PARENT_TGID
-	",:" PARENT_PID ",:" CLONE_FLAGS ",:" FILE_ID ",:" ARGS ",:" ENV
-	",:" INTERPRETER ",:" UID ",:" GID ",:" EUID ",:" EGID ",:" STDIN_INODE
-	",:" STDIN_TYPE ",:" STDOUT_INODE ",:" STDOUT_TYPE ",:" STDERR_INODE 
-	",:" STDERR_TYPE ");";
+					" EVENT_ID "," PARENT_TGID
+	"," PARENT_PID "," CLONE_FLAGS "," FILE_ID "," ARGS "," ENV
+	"," INTERPRETER "," UID "," GID "," EUID "," EGID "," STDIN_INODE
+	"," STDIN_TYPE "," STDOUT_INODE "," STDOUT_TYPE "," STDERR_INODE
+	"," STDERR_TYPE ") VALUES(:" EVENT_ID ",:" PARENT_TGID ",:" PARENT_PID
+	",:" CLONE_FLAGS ",:" FILE_ID ",:" ARGS ",:" ENV ",:" INTERPRETER
+	",:" UID ",:" GID ",:" EUID ",:" EGID ",:" STDIN_INODE ",:" STDIN_TYPE
+	",:" STDOUT_INODE ",:" STDOUT_TYPE ",:" STDERR_INODE ",:" STDERR_TYPE
+	");";
 
 unsigned char INSERT_SOCKET_CREATE_INFO[] =
 	"INSERT INTO socket_create_info(\
@@ -155,6 +156,24 @@ unsigned char SELECT_COMM_BY_EVENT_ID[] =
 unsigned char SELECT_COMM[] =
 	"SELECT " COMM " FROM disallowed WHERE " COMM " = :" COMM ";";
 
+unsigned char SELECT_PROCESS_INFO[] =
+	"SELECT E1." EVENT_TIME ", E1." SYSCALL ", E1." COMM ", E2." PARENT_TGID
+	", E2." CLONE_FLAGS ", E2." ARGS ", E2." ENV ", E2." INTERPRETER
+	", E2." UID ", E2." GID ", E2." EUID ", E2." EGID ", E2." STDIN_INODE
+	", E2." STDIN_TYPE ", E2." STDOUT_INODE ", E2." STDOUT_TYPE
+	", E2." STDERR_INODE ", E2." STDERR_TYPE ", E3." FILENAME
+	", E3." INODE_NUMBER ", E3." S_MAGIC " FROM events E1"
+	" JOIN process_info E2 ON E1." EVENT_ID " = E2." EVENT_ID
+	" JOIN file_info E3 ON E2." FILE_ID " = E3." FILE_ID " WHERE E1." TGID
+	" = :" TGID ";";
+
+unsigned char SELECT_MMAP_INFO[] =
+	"SELECT E1." EVENT_TIME ", E1." SYSCALL ", E1." COMM ", E2." VM_BASE
+	", E2." VM_FLAGS ", E2." VM_PROT ", E2." VM_LEN ", E3." FILENAME
+	", E3." INODE_NUMBER ", E3." S_MAGIC " FROM events E1 JOIN proc_mmap E2"
+	" ON E1." EVENT_ID " = E2." EVENT_ID " JOIN file_info E3 ON E2." FILE_ID
+	" = E3." FILE_ID " WHERE E1." TGID " = :" TGID ";";
+
 unsigned char BEGIN_STMT[] = "BEGIN;";
 unsigned char ROLLBACK_STMT[] = "ROLLBACK;";
 unsigned char COMMIT_STMT[] = "COMMIT;";
@@ -192,6 +211,9 @@ const stmt_t SQL_STMTS[] = {
 	{ SELECT_VM_INFO_BY_EVENT_ID, sizeof(SELECT_VM_INFO_BY_EVENT_ID) },
 	{ SELECT_COMM_BY_EVENT_ID, sizeof(SELECT_COMM_BY_EVENT_ID) },
 	{ SELECT_COMM, sizeof(SELECT_COMM) },
+	// Join statements
+	{ SELECT_PROCESS_INFO, sizeof(SELECT_PROCESS_INFO) },
+	{ SELECT_MMAP_INFO, sizeof(SELECT_MMAP_INFO) },
 	// Misc sql statements
 	{ ROLLBACK_STMT, sizeof(ROLLBACK_STMT) },
 	{ COMMIT_STMT, sizeof(COMMIT_STMT) },

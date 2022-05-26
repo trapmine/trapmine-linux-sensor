@@ -8,12 +8,17 @@
 #ifndef DATABASE_H
 #define DATABASE_H
 
+#include <bsd/string.h>
 #include <sqlite3.h>
 #include <events.h>
 #include <message.h>
 #include "util.h"
+#include "lua_process.h"
 
 #define TIMEOUT_MS 1000
+
+typedef struct lua_process_info_array lua_process_info_array;
+typedef struct lua_mmap_info_array lua_mmap_info_array;
 
 int create_connection(char *dbname, sqlite3 **db, int inmem);
 int initialize_database(char *dbname);
@@ -43,4 +48,9 @@ int rollback_transaction(sqlite3 *db, hashtable_t *ht);
 int commit_transaction(sqlite3 *db, hashtable_t *ht);
 int begin_transaction(sqlite3 *db, hashtable_t *ht);
 void close_database(sqlite3 *db);
+int select_all_process_info(sqlite3 *db, hashtable_t *ht,
+			    lua_process_info_array *process_info_arr,
+			    int tgid);
+int select_all_mmap_info(sqlite3 *db, hashtable_t *ht,
+			 lua_mmap_info_array *mmap_info_arr, int tgid);
 #endif // DATABASE_H
