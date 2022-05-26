@@ -1,5 +1,6 @@
 .vscode/*
 cscope.*
 *.o
+*.a
 *.skel.h
 *.swp
