@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <err.h>
 #include <lua_event.h>
+#include <lua_process.h>
 #include <syscall_defs.h>
 #include <message.h>
 #include <events.h>
@@ -75,6 +76,7 @@ int apply_rules(struct engine *e, struct message_state *ms)
 	ASSERT(event_rls != NULL, "process_rule: event_rls == NULL");
 
 	setup_event_context(le->L, ms);
+	init_process_context(le->L, e->db, e->sqlite_stmts);
 
 	// evaluate rule for any event
 	r = event_rls[LUA_ANY];
@@ -87,6 +89,7 @@ int apply_rules(struct engine *e, struct message_state *ms)
 		evaluate_rule_list(le->L, r);
 
 	teardown_event_context(le->L);
+	teardown_process_context(le->L);
 
 	return CODE_SUCCESS;
 }
