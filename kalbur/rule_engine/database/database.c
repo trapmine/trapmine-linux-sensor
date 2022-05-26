@@ -481,8 +481,10 @@ int insert_proc_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 
 	SQLITE3_BIND_INT("insert_proc_info", int, EVENT_ID, event_id);
 	SQLITE3_BIND_INT("insert_proc_info", int, FILE_ID, file_id);
-	SQLITE3_BIND_INT("insert_proc_info", int64, PARENT_TGID, (pinfo->ppid >> 32) & 0xFFFFFFFF);
-	SQLITE3_BIND_INT("insert_proc_info", int64, PARENT_PID, pinfo->ppid & 0xFFFFFFFF);
+	SQLITE3_BIND_INT("insert_proc_info", int64, PARENT_TGID,
+			 (pinfo->ppid >> 32) & 0xFFFFFFFF);
+	SQLITE3_BIND_INT("insert_proc_info", int64, PARENT_PID,
+			 pinfo->ppid & 0xFFFFFFFF);
 	SQLITE3_BIND_INT("insert_proc_info", int, UID, pinfo->credentials.uid);
 	SQLITE3_BIND_INT("insert_proc_info", int, GID, pinfo->credentials.gid);
 	SQLITE3_BIND_INT("insert_proc_info", int, EUID,
@@ -947,6 +949,9 @@ int select_all_mmap_info(sqlite3 *db, hashtable_t *ht,
 	sqlite3_stmt *ppStmt;
 	u64_t tmp_event_time;
 	u64_t tmp_vm_base;
+	u64_t tmp_vm_flags;
+	u64_t tmp_vm_prot;
+	u64_t tmp_vm_len;
 	int tmp_syscall;
 	const unsigned char *tmp_process_name;
 	int tmp_process_name_len;
@@ -1003,6 +1008,9 @@ int select_all_mmap_info(sqlite3 *db, hashtable_t *ht,
 				(int)strlen((const char *)tmp_process_name) + 1;
 
 			SQLITE3_GET(tmp_vm_base, int64, 3);
+			SQLITE3_GET(tmp_vm_flags, int64, 4);
+			SQLITE3_GET(tmp_vm_prot, int64, 5);
+			SQLITE3_GET(tmp_vm_len, int64, 6);
 
 			SQLITE3_GET(tmp_filename, text, 7);
 			// tmp_filename = sqlite3_column_text(ppStmt, 10);
@@ -1031,6 +1039,12 @@ int select_all_mmap_info(sqlite3 *db, hashtable_t *ht,
 
 			mmap_info_arr->values[mmap_info_arr->size - 1]->vm_base =
 				tmp_vm_base;
+			mmap_info_arr->values[mmap_info_arr->size - 1]
+				->vm_flags = tmp_vm_flags;
+			mmap_info_arr->values[mmap_info_arr->size - 1]->vm_prot =
+				tmp_vm_prot;
+			mmap_info_arr->values[mmap_info_arr->size - 1]->vm_len =
+				tmp_vm_len;
 
 			mmap_info_arr->values[mmap_info_arr->size - 1]
 				->file_info = (struct lua_file_info *)malloc(

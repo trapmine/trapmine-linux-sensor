@@ -63,6 +63,18 @@ int mmap_info_index(lua_State *L)
 		lua_pop(L, 1);
 		lua_pushinteger(L, (lua_Integer)mmap_info->vm_base);
 		return 1;
+	} else if (IS_ATTR(attribute, VM_FLAGS)) {
+		lua_pop(L, 1);
+		lua_pushinteger(L, (lua_Integer)mmap_info->vm_flags);
+		return 1;
+	} else if (IS_ATTR(attribute, VM_PROT)) {
+		lua_pop(L, 1);
+		lua_pushinteger(L, (lua_Integer)mmap_info->vm_prot);
+		return 1;
+	} else if (IS_ATTR(attribute, VM_LEN)) {
+		lua_pop(L, 1);
+		lua_pushinteger(L, (lua_Integer)mmap_info->vm_len);
+		return 1;
 	} else if (IS_ATTR(attribute, FILE)) {
 		lua_pop(L, 1);
 		// stack is reset

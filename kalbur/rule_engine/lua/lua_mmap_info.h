@@ -10,10 +10,16 @@
 #define MMAP_INFO "MmapInfo"
 
 #define VM_BASE "vm_base"
+#define VM_FLAGS "vm_flags"
+#define VM_PROT "vm_prot"
+#define VM_LEN "vm_len"
 #define FILE "file"
 struct lua_mmap_info {
 	struct lua_event_info *event_info;
 	u64_t vm_base;
+	u64_t vm_flags;
+	u64_t vm_prot;
+	u64_t vm_len;
 	struct lua_file_info *file_info;
 };
 
