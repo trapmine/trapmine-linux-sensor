@@ -15,6 +15,7 @@ FILE_INFO := lua_file_info
 PROCESS_INFO := lua_process_info
 MMAP_INFO := lua_mmap_info
 PTRACE_INFO := lua_ptrace_info
+SOCKET_CREATE_INFO := lua_socket_create_info
 
 all: $(ENGINE).o \
 	$(EVENT).o \
@@ -27,6 +28,7 @@ all: $(ENGINE).o \
 	$(PROCESS_INFO).o \
 	$(MMAP_INFO).o \
 	$(PTRACE_INFO).o \
+	$(SOCKET_CREATE_INFO).o \
 
 $(ENGINE).o: $(ENGINE).c $(ENGINE).h
 	$(call msg,LUA_ENGINE,$@)
@@ -71,6 +73,10 @@ $(MMAP_INFO).o: $(MMAP_INFO).c $(MMAP_INFO).h
 $(PTRACE_INFO).o: $(PTRACE_INFO).c $(PTRACE_INFO).h
 	$(call msg,LUA_PTRACE_INFO,$@)
 	$(Q)$(CC) -DAPPLY_ASSERT $(DEBUG_FLAG) $(CFLAGS) $(INCLUDES) -c $(PTRACE_INFO).c -o $@
+
+$(SOCKET_CREATE_INFO).o: $(SOCKET_CREATE_INFO).c $(SOCKET_CREATE_INFO).h
+	$(call msg,LUA_SOCKET_CREATE_INFO,$@)
+	$(Q)$(CC) -DAPPLY_ASSERT $(DEBUG_FLAG) $(CFLAGS) $(INCLUDES) -c $(SOCKET_CREATE_INFO).c -o $@
 
 clean:
 	$(call msg,CLEAN)

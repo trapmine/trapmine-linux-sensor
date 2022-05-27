@@ -1293,3 +1293,141 @@ int select_all_ptrace_info(sqlite3 *db, hashtable_t *ht,
 
 	return err;
 }
+
+int select_all_socket_create_info(
+	sqlite3 *db, hashtable_t *ht,
+	lua_socket_create_info_array *socket_create_info_arr, int tgid)
+{
+	int err;
+	sqlite3_stmt *ppStmt;
+	u64_t tmp_event_time;
+	u64_t tmp_inode;
+	const unsigned char *tmp_family;
+	int tmp_family_len;
+	const unsigned char *tmp_sock_type;
+	int tmp_sock_type_len;
+	int tmp_syscall;
+	const unsigned char *tmp_process_name;
+	int tmp_process_name_len;
+	struct lua_socket_create_info **tmp_values;
+
+	ASSERT(socket_create_info_arr != NULL,
+	       "select_all_socket_create_info: socket_create_info_arr is NULL");
+	ASSERT(socket_create_info_arr->values != NULL,
+	       "select_all_socket_create_info: socket_create_info_arr->values is NULL");
+	ASSERT(socket_create_info_arr->size == 0,
+	       "select_all_socket_create_info: socket_create_info_arr is non-empty");
+
+	ppStmt = (sqlite3_stmt *)hash_get(ht, SELECT_SOCKET_CREATE_INFO,
+					  sizeof(SELECT_SOCKET_CREATE_INFO));
+	if (ppStmt == NULL) {
+		fprintf(stderr,
+			"select_all_socket_create_info: Failed to acquire prepared statement from hashmap.\n");
+		return CODE_FAILED;
+	}
+
+	SQLITE3_BIND_INT("select_all_socket_create_info", int, TGID, tgid);
+
+	while (true) {
+		err = sqlite3_step(ppStmt);
+		if (err != SQLITE_ROW) {
+			break;
+		}
+		if (err == SQLITE_ROW) {
+			if (socket_create_info_arr->size ==
+			    socket_create_info_arr->max_size) {
+				socket_create_info_arr->max_size +=
+					PROCESS_INFO_CHUNK_SIZE;
+				tmp_values = realloc(
+					socket_create_info_arr->values,
+					sizeof(struct process_info) *
+						(size_t)socket_create_info_arr
+							->max_size);
+				if (tmp_values == NULL) {
+					fprintf(stderr,
+						"select_all_socket_create_info: Failed to realloc memory for socket_create_info_arr->values\n");
+					sqlite3_clear_bindings(ppStmt);
+					sqlite3_reset(ppStmt);
+					return CODE_FAILED;
+				}
+				socket_create_info_arr->values = tmp_values;
+			}
+			socket_create_info_arr->size += 1;
+			SQLITE3_GET(tmp_event_time, int64, 0);
+			SQLITE3_GET(tmp_syscall, int, 1);
+			SQLITE3_GET(tmp_process_name, text, 2);
+			tmp_process_name_len =
+				(int)strlen((const char *)tmp_process_name) + 1;
+
+			SQLITE3_GET(tmp_inode, int64, 3);
+			SQLITE3_GET(tmp_family, text, 4);
+			if (tmp_family == NULL) {
+				tmp_family = "";
+			}
+			tmp_family_len =
+				(int)strlen((const char *)tmp_family) + 1;
+			SQLITE3_GET(tmp_sock_type, text, 5);
+			if (tmp_sock_type == NULL) {
+				tmp_sock_type = "";
+			}
+			tmp_sock_type_len =
+				(int)strlen((const char *)tmp_sock_type) + 1;
+
+			socket_create_info_arr
+				->values[socket_create_info_arr->size - 1] =
+				(struct lua_socket_create_info *)malloc(
+					sizeof(struct lua_socket_create_info));
+			socket_create_info_arr
+				->values[socket_create_info_arr->size - 1]
+				->event_info = (struct lua_event_info *)malloc(
+				sizeof(struct lua_event_info));
+			socket_create_info_arr
+				->values[socket_create_info_arr->size - 1]
+				->event_info->process_name = (char *)malloc(
+				(sizeof(char) * (size_t)tmp_process_name_len));
+			socket_create_info_arr
+				->values[socket_create_info_arr->size - 1]
+				->event_info->event_time = tmp_event_time;
+			socket_create_info_arr
+				->values[socket_create_info_arr->size - 1]
+				->event_info->syscall = tmp_syscall;
+			strlcpy(socket_create_info_arr
+					->values[socket_create_info_arr->size -
+						 1]
+					->event_info->process_name,
+				(const char *)tmp_process_name,
+				(size_t)tmp_process_name_len);
+
+			socket_create_info_arr
+				->values[socket_create_info_arr->size - 1]
+				->inode = tmp_inode;
+			socket_create_info_arr
+				->values[socket_create_info_arr->size - 1]
+				->family = (char *)malloc(
+				(sizeof(char) * (size_t)tmp_family_len));
+			strlcpy(socket_create_info_arr
+					->values[socket_create_info_arr->size -
+						 1]
+					->family,
+				(const char *)tmp_family,
+				(size_t)tmp_family_len);
+			socket_create_info_arr
+				->values[socket_create_info_arr->size - 1]
+				->socket_type = (char *)malloc(
+				(sizeof(char) * (size_t)tmp_sock_type_len));
+			strlcpy(socket_create_info_arr
+					->values[socket_create_info_arr->size -
+						 1]
+					->socket_type,
+				(const char *)tmp_sock_type,
+				(size_t)tmp_sock_type_len);
+		}
+	}
+
+	err = err == SQLITE_DONE ? CODE_SUCCESS : CODE_FAILED;
+
+	sqlite3_clear_bindings(ppStmt);
+	sqlite3_reset(ppStmt);
+
+	return err;
+}
