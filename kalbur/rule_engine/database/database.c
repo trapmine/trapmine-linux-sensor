@@ -956,15 +956,15 @@ int select_all_process_info(sqlite3 *db, hashtable_t *ht,
 				(int)strlen((const char *)tmp_process_name) + 1;
 
 			if (tmp_args == NULL) {
-				tmp_args = "";
+				tmp_args = (const unsigned char*) "";
 			}
 			tmp_args_len = (int)strlen((const char *)tmp_args) + 1;
 			if (tmp_env == NULL) {
-				tmp_env = "";
+				tmp_env = (const unsigned char*) "";
 			}
 			tmp_env_len = (int)strlen((const char *)tmp_env) + 1;
 			if (tmp_interpreter == NULL) {
-				tmp_interpreter = "";
+				tmp_interpreter = (const unsigned char*) "";
 			}
 			tmp_interpreter_len =
 				(int)strlen((const char *)tmp_interpreter) + 1;
@@ -1362,13 +1362,13 @@ int select_all_socket_create_info(
 			SQLITE3_GET(tmp_inode, int64, 3);
 			SQLITE3_GET(tmp_family, text, 4);
 			if (tmp_family == NULL) {
-				tmp_family = "";
+				tmp_family = (const unsigned char*) "";
 			}
 			tmp_family_len =
 				(int)strlen((const char *)tmp_family) + 1;
 			SQLITE3_GET(tmp_sock_type, text, 5);
 			if (tmp_sock_type == NULL) {
-				tmp_sock_type = "";
+				tmp_sock_type = (const unsigned char*) "";
 			}
 			tmp_sock_type_len =
 				(int)strlen((const char *)tmp_sock_type) + 1;
@@ -1439,7 +1439,7 @@ int select_all_tcp_connection_info(
 	int err;
 	sqlite3_stmt *ppStmt;
 	u64_t tmp_event_time;
-	u64_t tmp_inode;
+	int tmp_inode;
 	const unsigned char *tmp_direction;
 	int tmp_src_port;
 	int tmp_dst_port;
@@ -1504,17 +1504,17 @@ int select_all_tcp_connection_info(
 
 			SQLITE3_GET(tmp_inet_type, text, 3);
 			if (tmp_inet_type == NULL) {
-				tmp_inet_type = "";
+				tmp_inet_type = (const unsigned char*) "";
 			}
 			tmp_inet_type_len =
 				(int)strlen((const char *)tmp_inet_type) + 1;
 
 			SQLITE3_GET(tmp_direction, text, 8);
-			SQLITE3_GET(tmp_inode, int64, 9);
-			if (strcmp(tmp_direction, "outgoing") == 0) {
+			SQLITE3_GET(tmp_inode, int, 9);
+			if (strcmp((const char*)tmp_direction, "outgoing") == 0) {
 				SQLITE3_GET(tmp_src_addr, text, 4);
 				if (tmp_src_addr == NULL) {
-					tmp_src_addr = "";
+					tmp_src_addr = (const unsigned char*) "";
 				}
 				tmp_src_addr_len =
 					(int)strlen(
@@ -1524,17 +1524,17 @@ int select_all_tcp_connection_info(
 
 				SQLITE3_GET(tmp_dst_addr, text, 6);
 				if (tmp_dst_addr == NULL) {
-					tmp_dst_addr = "";
+					tmp_dst_addr = (const unsigned char*) "";
 				}
 				tmp_dst_addr_len =
 					(int)strlen(
 						(const char *)tmp_dst_addr) +
 					1;
 				SQLITE3_GET(tmp_dst_port, int, 7);
-			} else if (strcmp(tmp_direction, "incoming") == 0) {
+			} else if (strcmp((const char*)tmp_direction, "incoming") == 0) {
 				SQLITE3_GET(tmp_src_addr, text, 6);
 				if (tmp_src_addr == NULL) {
-					tmp_src_addr = "";
+					tmp_src_addr = (const unsigned char*) "";
 				}
 				tmp_src_addr_len =
 					(int)strlen(
@@ -1544,7 +1544,7 @@ int select_all_tcp_connection_info(
 
 				SQLITE3_GET(tmp_dst_addr, text, 4);
 				if (tmp_dst_addr == NULL) {
-					tmp_dst_addr = "";
+					tmp_dst_addr = (const unsigned char*) "";
 				}
 				tmp_dst_addr_len =
 					(int)strlen(
@@ -1625,6 +1625,130 @@ int select_all_tcp_connection_info(
 			tcp_connection_info_arr
 				->values[tcp_connection_info_arr->size - 1]
 				->dst_port = tmp_dst_port;
+		}
+	}
+
+	err = err == SQLITE_DONE ? CODE_SUCCESS : CODE_FAILED;
+
+	sqlite3_clear_bindings(ppStmt);
+	sqlite3_reset(ppStmt);
+
+	return err;
+}
+
+int select_all_module_load_info(sqlite3 *db, hashtable_t *ht,
+				lua_module_load_info_array *module_load_info_arr,
+				int tgid)
+{
+	int err;
+	sqlite3_stmt *ppStmt;
+	u64_t tmp_event_time;
+	int tmp_syscall;
+	const unsigned char *tmp_process_name;
+	int tmp_process_name_len;
+	const unsigned char *tmp_filename;
+	int tmp_filename_len;
+	u64_t tmp_inode;
+	u64_t tmp_s_magic;
+	struct lua_module_load_info **tmp_values;
+
+	ASSERT(module_load_info_arr != NULL,
+	       "select_all_module_load_info: module_load_info_arr is NULL");
+	ASSERT(module_load_info_arr->values != NULL,
+	       "select_all_module_load_info: module_load_info_arr->values is NULL");
+	ASSERT(module_load_info_arr->size == 0,
+	       "select_all_module_load_info: module_load_info_arr is non-empty");
+
+	ppStmt = (sqlite3_stmt *)hash_get(ht, SELECT_MODULE_LOAD_INFO,
+					  sizeof(SELECT_MODULE_LOAD_INFO));
+	if (ppStmt == NULL) {
+		fprintf(stderr,
+			"select_all_module_load_info: Failed to acquire prepared statement from hashmap.\n");
+		return CODE_FAILED;
+	}
+
+	SQLITE3_BIND_INT("select_all_module_load_info", int, TGID, tgid);
+
+	while (true) {
+		err = sqlite3_step(ppStmt);
+		if (err != SQLITE_ROW) {
+			break;
+		}
+		if (err == SQLITE_ROW) {
+			if (module_load_info_arr->size ==
+			    module_load_info_arr->max_size) {
+				module_load_info_arr->max_size +=
+					PROCESS_INFO_CHUNK_SIZE;
+				tmp_values = realloc(
+					module_load_info_arr->values,
+					sizeof(struct process_info) *
+						(size_t)module_load_info_arr
+							->max_size);
+				if (tmp_values == NULL) {
+					fprintf(stderr,
+						"select_all_module_load_info: Failed to realloc memory for module_load_info_arr->values\n");
+					sqlite3_clear_bindings(ppStmt);
+					sqlite3_reset(ppStmt);
+					return CODE_FAILED;
+				}
+				module_load_info_arr->values = tmp_values;
+			}
+			module_load_info_arr->size += 1;
+			SQLITE3_GET(tmp_event_time, int64, 0);
+			SQLITE3_GET(tmp_syscall, int, 1);
+			SQLITE3_GET(tmp_process_name, text, 2);
+			tmp_process_name_len =
+				(int)strlen((const char *)tmp_process_name) + 1;
+
+			SQLITE3_GET(tmp_filename, text, 3);
+			tmp_filename_len =
+				(int)strlen((const char *)tmp_filename) + 1;
+			SQLITE3_GET(tmp_inode, int64, 4);
+			SQLITE3_GET(tmp_s_magic, int64, 5);
+
+			module_load_info_arr
+				->values[module_load_info_arr->size - 1] =
+				(struct lua_module_load_info *)malloc(
+					sizeof(struct lua_module_load_info));
+			module_load_info_arr
+				->values[module_load_info_arr->size - 1]
+				->event_info = (struct lua_event_info *)malloc(
+				sizeof(struct lua_event_info));
+			module_load_info_arr
+				->values[module_load_info_arr->size - 1]
+				->event_info->process_name = (char *)malloc(
+				(sizeof(char) * (size_t)tmp_process_name_len));
+			module_load_info_arr
+				->values[module_load_info_arr->size - 1]
+				->event_info->event_time = tmp_event_time;
+			module_load_info_arr
+				->values[module_load_info_arr->size - 1]
+				->event_info->syscall = tmp_syscall;
+			strlcpy(module_load_info_arr
+					->values[module_load_info_arr->size - 1]
+					->event_info->process_name,
+				(const char *)tmp_process_name,
+				(size_t)tmp_process_name_len);
+
+			module_load_info_arr
+				->values[module_load_info_arr->size - 1]
+				->file_info = (struct lua_file_info *)malloc(
+				sizeof(struct lua_file_info));
+			module_load_info_arr
+				->values[module_load_info_arr->size - 1]
+				->file_info->filename = (char *)malloc(
+				(sizeof(char) * (size_t)tmp_filename_len));
+			strlcpy(module_load_info_arr
+					->values[module_load_info_arr->size - 1]
+					->file_info->filename,
+				(const char *)tmp_filename,
+				(size_t)tmp_filename_len);
+			module_load_info_arr
+				->values[module_load_info_arr->size - 1]
+				->file_info->inode = tmp_inode;
+			module_load_info_arr
+				->values[module_load_info_arr->size - 1]
+				->file_info->s_magic = tmp_s_magic;
 		}
 	}
 
