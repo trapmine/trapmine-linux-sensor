@@ -1431,3 +1431,207 @@ int select_all_socket_create_info(
 
 	return err;
 }
+
+int select_all_tcp_connection_info(
+	sqlite3 *db, hashtable_t *ht,
+	lua_tcp_connection_info_array *tcp_connection_info_arr, int tgid)
+{
+	int err;
+	sqlite3_stmt *ppStmt;
+	u64_t tmp_event_time;
+	u64_t tmp_inode;
+	const unsigned char *tmp_direction;
+	int tmp_src_port;
+	int tmp_dst_port;
+	const unsigned char *tmp_src_addr;
+	int tmp_src_addr_len;
+	const unsigned char *tmp_dst_addr;
+	int tmp_dst_addr_len;
+	const unsigned char *tmp_inet_type;
+	int tmp_inet_type_len;
+	int tmp_syscall;
+	const unsigned char *tmp_process_name;
+	int tmp_process_name_len;
+	struct lua_tcp_connection_info **tmp_values;
+
+	ASSERT(tcp_connection_info_arr != NULL,
+	       "select_all_tcp_connection_info: tcp_connection_info_arr is NULL");
+	ASSERT(tcp_connection_info_arr->values != NULL,
+	       "select_all_tcp_connection_info: tcp_connection_info_arr->values is NULL");
+	ASSERT(tcp_connection_info_arr->size == 0,
+	       "select_all_tcp_connection_info: tcp_connection_info_arr is non-empty");
+
+	ppStmt = (sqlite3_stmt *)hash_get(ht, SELECT_TCP_CONNECTION_INFO,
+					  sizeof(SELECT_TCP_CONNECTION_INFO));
+	if (ppStmt == NULL) {
+		fprintf(stderr,
+			"select_all_tcp_connection_info: Failed to acquire prepared statement from hashmap.\n");
+		return CODE_FAILED;
+	}
+
+	SQLITE3_BIND_INT("select_all_tcp_connection_info", int, TGID, tgid);
+
+	while (true) {
+		err = sqlite3_step(ppStmt);
+		if (err != SQLITE_ROW) {
+			break;
+		}
+		if (err == SQLITE_ROW) {
+			if (tcp_connection_info_arr->size ==
+			    tcp_connection_info_arr->max_size) {
+				tcp_connection_info_arr->max_size +=
+					PROCESS_INFO_CHUNK_SIZE;
+				tmp_values = realloc(
+					tcp_connection_info_arr->values,
+					sizeof(struct process_info) *
+						(size_t)tcp_connection_info_arr
+							->max_size);
+				if (tmp_values == NULL) {
+					fprintf(stderr,
+						"select_all_tcp_connection_info: Failed to realloc memory for tcp_connection_info_arr->values\n");
+					sqlite3_clear_bindings(ppStmt);
+					sqlite3_reset(ppStmt);
+					return CODE_FAILED;
+				}
+				tcp_connection_info_arr->values = tmp_values;
+			}
+			tcp_connection_info_arr->size += 1;
+			SQLITE3_GET(tmp_event_time, int64, 0);
+			SQLITE3_GET(tmp_syscall, int, 1);
+			SQLITE3_GET(tmp_process_name, text, 2);
+			tmp_process_name_len =
+				(int)strlen((const char *)tmp_process_name) + 1;
+
+			SQLITE3_GET(tmp_inet_type, text, 3);
+			if (tmp_inet_type == NULL) {
+				tmp_inet_type = "";
+			}
+			tmp_inet_type_len =
+				(int)strlen((const char *)tmp_inet_type) + 1;
+
+			SQLITE3_GET(tmp_direction, text, 8);
+			SQLITE3_GET(tmp_inode, int64, 9);
+			if (strcmp(tmp_direction, "outgoing") == 0) {
+				SQLITE3_GET(tmp_src_addr, text, 4);
+				if (tmp_src_addr == NULL) {
+					tmp_src_addr = "";
+				}
+				tmp_src_addr_len =
+					(int)strlen(
+						(const char *)tmp_src_addr) +
+					1;
+				SQLITE3_GET(tmp_src_port, int, 5);
+
+				SQLITE3_GET(tmp_dst_addr, text, 6);
+				if (tmp_dst_addr == NULL) {
+					tmp_dst_addr = "";
+				}
+				tmp_dst_addr_len =
+					(int)strlen(
+						(const char *)tmp_dst_addr) +
+					1;
+				SQLITE3_GET(tmp_dst_port, int, 7);
+			} else if (strcmp(tmp_direction, "incoming") == 0) {
+				SQLITE3_GET(tmp_src_addr, text, 6);
+				if (tmp_src_addr == NULL) {
+					tmp_src_addr = "";
+				}
+				tmp_src_addr_len =
+					(int)strlen(
+						(const char *)tmp_src_addr) +
+					1;
+				SQLITE3_GET(tmp_src_port, int, 7);
+
+				SQLITE3_GET(tmp_dst_addr, text, 4);
+				if (tmp_dst_addr == NULL) {
+					tmp_dst_addr = "";
+				}
+				tmp_dst_addr_len =
+					(int)strlen(
+						(const char *)tmp_dst_addr) +
+					1;
+				SQLITE3_GET(tmp_dst_port, int, 5);
+			} else {
+				fprintf(stderr,
+					"select_all_tcp_connection_info: Unknown direction: %s\n",
+					tmp_direction);
+				sqlite3_clear_bindings(ppStmt);
+				sqlite3_reset(ppStmt);
+				return CODE_FAILED;
+			}
+
+			tcp_connection_info_arr
+				->values[tcp_connection_info_arr->size - 1] =
+				(struct lua_tcp_connection_info *)malloc(
+					sizeof(struct lua_tcp_connection_info));
+			tcp_connection_info_arr
+				->values[tcp_connection_info_arr->size - 1]
+				->event_info = (struct lua_event_info *)malloc(
+				sizeof(struct lua_event_info));
+			tcp_connection_info_arr
+				->values[tcp_connection_info_arr->size - 1]
+				->event_info->process_name = (char *)malloc(
+				(sizeof(char) * (size_t)tmp_process_name_len));
+			tcp_connection_info_arr
+				->values[tcp_connection_info_arr->size - 1]
+				->event_info->event_time = tmp_event_time;
+			tcp_connection_info_arr
+				->values[tcp_connection_info_arr->size - 1]
+				->event_info->syscall = tmp_syscall;
+			strlcpy(tcp_connection_info_arr
+					->values[tcp_connection_info_arr->size -
+						 1]
+					->event_info->process_name,
+				(const char *)tmp_process_name,
+				(size_t)tmp_process_name_len);
+
+			tcp_connection_info_arr
+				->values[tcp_connection_info_arr->size - 1]
+				->inode = tmp_inode;
+			tcp_connection_info_arr
+				->values[tcp_connection_info_arr->size - 1]
+				->type = (char *)malloc(
+				(sizeof(char) * (size_t)tmp_inet_type_len));
+			strlcpy(tcp_connection_info_arr
+					->values[tcp_connection_info_arr->size -
+						 1]
+					->type,
+				(const char *)tmp_inet_type,
+				(size_t)tmp_inet_type_len);
+
+			tcp_connection_info_arr
+				->values[tcp_connection_info_arr->size - 1]
+				->src_addr = (char *)malloc(
+				(sizeof(char) * (size_t)tmp_src_addr_len));
+			strlcpy(tcp_connection_info_arr
+					->values[tcp_connection_info_arr->size -
+						 1]
+					->src_addr,
+				(const char *)tmp_src_addr,
+				(size_t)tmp_src_addr_len);
+			tcp_connection_info_arr
+				->values[tcp_connection_info_arr->size - 1]
+				->dst_addr = (char *)malloc(
+				(sizeof(char) * (size_t)tmp_dst_addr_len));
+			strlcpy(tcp_connection_info_arr
+					->values[tcp_connection_info_arr->size -
+						 1]
+					->dst_addr,
+				(const char *)tmp_dst_addr,
+				(size_t)tmp_dst_addr_len);
+			tcp_connection_info_arr
+				->values[tcp_connection_info_arr->size - 1]
+				->src_port = tmp_src_port;
+			tcp_connection_info_arr
+				->values[tcp_connection_info_arr->size - 1]
+				->dst_port = tmp_dst_port;
+		}
+	}
+
+	err = err == SQLITE_DONE ? CODE_SUCCESS : CODE_FAILED;
+
+	sqlite3_clear_bindings(ppStmt);
+	sqlite3_reset(ppStmt);
+
+	return err;
+}

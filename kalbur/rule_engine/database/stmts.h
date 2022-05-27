@@ -187,6 +187,13 @@ unsigned char SELECT_SOCKET_CREATE_INFO[] =
 	" FROM events E1 JOIN socket_create_info E2"
 	" ON E1." EVENT_ID " = E2." EVENT_ID " WHERE E1." TGID " = :" TGID ";";
 
+unsigned char SELECT_TCP_CONNECTION_INFO[] =
+	"SELECT E1." EVENT_TIME ", E1." SYSCALL ", E1." COMM ", E2." TYPE
+	", E2." SADDR ", E2." SPORT ", E2." DADDR ", E2." DPORT
+	", E2." DIRECTION ", E2." SOCK_INODE
+	" FROM events E1 JOIN tcp_connection_info E2 ON E1." EVENT_ID
+	" = E2." EVENT_ID " WHERE E1." TGID " = :" TGID ";";
+
 unsigned char BEGIN_STMT[] = "BEGIN;";
 unsigned char ROLLBACK_STMT[] = "ROLLBACK;";
 unsigned char COMMIT_STMT[] = "COMMIT;";
@@ -229,6 +236,7 @@ const stmt_t SQL_STMTS[] = {
 	{ SELECT_MMAP_INFO, sizeof(SELECT_MMAP_INFO) },
 	{ SELECT_PTRACE_INFO, sizeof(SELECT_PTRACE_INFO) },
 	{ SELECT_SOCKET_CREATE_INFO, sizeof(SELECT_SOCKET_CREATE_INFO) },
+	{ SELECT_TCP_CONNECTION_INFO, sizeof(SELECT_TCP_CONNECTION_INFO) },
 	// Misc sql statements
 	{ ROLLBACK_STMT, sizeof(ROLLBACK_STMT) },
 	{ COMMIT_STMT, sizeof(COMMIT_STMT) },

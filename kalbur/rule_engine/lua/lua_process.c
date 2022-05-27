@@ -106,6 +106,9 @@ int process_index(lua_State *L)
 	} else if (IS_ATTR(attr, SOCKET_CREATE_INFO)) {
 		lua_pop(L, 1);
 		get_socket_create_info(L);
+	} else if (IS_ATTR(attr, TCP_CONNECTION_INFO)) {
+		lua_pop(L, 1);
+		get_tcp_connection_info(L);
 	} else {
 		fprintf(stderr, "process_index: unknown attribute\n");
 		lua_pop(L, 2);
@@ -189,6 +192,7 @@ int get_process_by_pid(lua_State *L)
 		process_context->mmap_info_arr = NULL;
 		process_context->ptrace_info_arr = NULL;
 		process_context->socket_create_info_arr = NULL;
+		process_context->tcp_connection_info_arr = NULL;
 	}
 
 	// sanity checks
@@ -299,6 +303,8 @@ void teardown_process_context(lua_State *L)
 		delete_lua_ptrace_info_array(process_context->ptrace_info_arr);
 		delete_lua_socket_create_info_array(
 			process_context->socket_create_info_arr);
+		delete_lua_tcp_connection_info_array(
+			process_context->tcp_connection_info_arr);
 
 		lua_pop(L, 1);
 	}

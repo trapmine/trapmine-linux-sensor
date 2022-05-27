@@ -16,6 +16,7 @@
 #include "lua_mmap_info.h"
 #include "lua_ptrace_info.h"
 #include "lua_socket_create_info.h"
+#include "lua_tcp_connection_info.h"
 
 #define GLOBAL_LUA_DB "SENSOR_DB"
 #define GLOBAL_PID_LIST "SENSOR_PID_LIST"
@@ -37,6 +38,7 @@ struct lua_process_context {
 	struct lua_mmap_info_array *mmap_info_arr;
 	struct lua_ptrace_info_array *ptrace_info_arr;
 	struct lua_socket_create_info_array *socket_create_info_arr;
+	struct lua_tcp_connection_info_array *tcp_connection_info_arr;
 };
 
 struct lua_db *get_lua_db(lua_State *L);
