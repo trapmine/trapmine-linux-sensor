@@ -16,6 +16,16 @@ void delete_lua_socket_create_info(
 		delete_lua_event_info(socket_create_info->event_info);
 	}
 
+	if (socket_create_info->family != NULL) {
+		free(socket_create_info->family);
+		socket_create_info->family = NULL;
+	}
+
+	if (socket_create_info->socket_type != NULL) {
+		free(socket_create_info->socket_type);
+		socket_create_info->socket_type = NULL;
+	}
+
 	free(socket_create_info);
 	socket_create_info = NULL;
 }

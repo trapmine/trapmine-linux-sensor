@@ -16,6 +16,21 @@ void delete_lua_tcp_connection_info(
 		delete_lua_event_info(tcp_connection_info->event_info);
 	}
 
+    if (tcp_connection_info->type != NULL) {
+        free(tcp_connection_info->type);
+        tcp_connection_info->type = NULL;
+    }
+
+    if (tcp_connection_info->src_addr != NULL) {
+        free(tcp_connection_info->src_addr);
+        tcp_connection_info->src_addr = NULL;
+    }
+
+    if (tcp_connection_info->dst_addr != NULL) {
+        free(tcp_connection_info->dst_addr);
+        tcp_connection_info->dst_addr = NULL;
+    }
+
 	free(tcp_connection_info);
 	tcp_connection_info = NULL;
 }
