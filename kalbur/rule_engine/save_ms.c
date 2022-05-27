@@ -467,7 +467,6 @@ MESSAGE_HANDLER_FUNC(save_exit_event)
 	if (err != CODE_SUCCESS)
 		return err;
 
-	printf("exit event syscall nr: %d\n", ((struct probe_event_header *)ms->primary_data)->syscall_nr);
 	event_id = insert_event(db, ht,
 				(struct probe_event_header *)ms->primary_data);
 	if (ERR_NOT_SUCCESS(event_id)) {
