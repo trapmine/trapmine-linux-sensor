@@ -197,9 +197,14 @@ unsigned char SELECT_TCP_CONNECTION_INFO[] =
 unsigned char SELECT_MODULE_LOAD_INFO[] =
 	"SELECT E1." EVENT_TIME ", E1." SYSCALL ", E1." COMM ", E3." FILENAME
 	", E3." INODE_NUMBER ", E3." S_MAGIC
-	" FROM events E1 JOIN module_load E2 ON E1." EVENT_ID
-	" = E2." EVENT_ID " JOIN file_info E3 ON E2." FILE_ID " = E3." FILE_ID
-	" WHERE E1." TGID " = :" TGID ";";
+	" FROM events E1 JOIN module_load E2 ON E1." EVENT_ID " = E2." EVENT_ID
+	" JOIN file_info E3 ON E2." FILE_ID " = E3." FILE_ID " WHERE E1." TGID
+	" = :" TGID ";";
+
+unsigned char SELECT_MODPROBE_OVERWRITE_INFO[] =
+	"SELECT E1." EVENT_TIME ", E1." SYSCALL ", E1." COMM ", E2." PATH_NAME
+	" FROM events E1 JOIN modprobe_overwrite_info E2 ON E1." EVENT_ID
+	" = E2." EVENT_ID " WHERE E1." TGID " = :" TGID ";";
 
 unsigned char BEGIN_STMT[] = "BEGIN;";
 unsigned char ROLLBACK_STMT[] = "ROLLBACK;";
@@ -245,6 +250,8 @@ const stmt_t SQL_STMTS[] = {
 	{ SELECT_SOCKET_CREATE_INFO, sizeof(SELECT_SOCKET_CREATE_INFO) },
 	{ SELECT_TCP_CONNECTION_INFO, sizeof(SELECT_TCP_CONNECTION_INFO) },
 	{ SELECT_MODULE_LOAD_INFO, sizeof(SELECT_MODULE_LOAD_INFO) },
+	{ SELECT_MODPROBE_OVERWRITE_INFO,
+	  sizeof(SELECT_MODPROBE_OVERWRITE_INFO) },
 	// Misc sql statements
 	{ ROLLBACK_STMT, sizeof(ROLLBACK_STMT) },
 	{ COMMIT_STMT, sizeof(COMMIT_STMT) },

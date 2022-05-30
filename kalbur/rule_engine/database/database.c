@@ -956,15 +956,15 @@ int select_all_process_info(sqlite3 *db, hashtable_t *ht,
 				(int)strlen((const char *)tmp_process_name) + 1;
 
 			if (tmp_args == NULL) {
-				tmp_args = (const unsigned char*) "";
+				tmp_args = (const unsigned char *)"";
 			}
 			tmp_args_len = (int)strlen((const char *)tmp_args) + 1;
 			if (tmp_env == NULL) {
-				tmp_env = (const unsigned char*) "";
+				tmp_env = (const unsigned char *)"";
 			}
 			tmp_env_len = (int)strlen((const char *)tmp_env) + 1;
 			if (tmp_interpreter == NULL) {
-				tmp_interpreter = (const unsigned char*) "";
+				tmp_interpreter = (const unsigned char *)"";
 			}
 			tmp_interpreter_len =
 				(int)strlen((const char *)tmp_interpreter) + 1;
@@ -1107,8 +1107,7 @@ int select_all_mmap_info(sqlite3 *db, hashtable_t *ht,
 		}
 		if (err == SQLITE_ROW) {
 			if (mmap_info_arr->size == mmap_info_arr->max_size) {
-				mmap_info_arr->max_size +=
-					PROCESS_INFO_CHUNK_SIZE;
+				mmap_info_arr->max_size += MMAP_INFO_CHUNK_SIZE;
 				tmp_values = realloc(
 					mmap_info_arr->values,
 					sizeof(struct process_info) *
@@ -1232,7 +1231,7 @@ int select_all_ptrace_info(sqlite3 *db, hashtable_t *ht,
 			if (ptrace_info_arr->size ==
 			    ptrace_info_arr->max_size) {
 				ptrace_info_arr->max_size +=
-					PROCESS_INFO_CHUNK_SIZE;
+					PTRACE_INFO_CHUNK_SIZE;
 				tmp_values =
 					realloc(ptrace_info_arr->values,
 						sizeof(struct process_info) *
@@ -1337,7 +1336,7 @@ int select_all_socket_create_info(
 			if (socket_create_info_arr->size ==
 			    socket_create_info_arr->max_size) {
 				socket_create_info_arr->max_size +=
-					PROCESS_INFO_CHUNK_SIZE;
+					SOCKET_CREATE_INFO_CHUNK_SIZE;
 				tmp_values = realloc(
 					socket_create_info_arr->values,
 					sizeof(struct process_info) *
@@ -1362,13 +1361,13 @@ int select_all_socket_create_info(
 			SQLITE3_GET(tmp_inode, int64, 3);
 			SQLITE3_GET(tmp_family, text, 4);
 			if (tmp_family == NULL) {
-				tmp_family = (const unsigned char*) "";
+				tmp_family = (const unsigned char *)"";
 			}
 			tmp_family_len =
 				(int)strlen((const char *)tmp_family) + 1;
 			SQLITE3_GET(tmp_sock_type, text, 5);
 			if (tmp_sock_type == NULL) {
-				tmp_sock_type = (const unsigned char*) "";
+				tmp_sock_type = (const unsigned char *)"";
 			}
 			tmp_sock_type_len =
 				(int)strlen((const char *)tmp_sock_type) + 1;
@@ -1480,7 +1479,7 @@ int select_all_tcp_connection_info(
 			if (tcp_connection_info_arr->size ==
 			    tcp_connection_info_arr->max_size) {
 				tcp_connection_info_arr->max_size +=
-					PROCESS_INFO_CHUNK_SIZE;
+					TCP_CONNECTION_INFO_CHUNK_SIZE;
 				tmp_values = realloc(
 					tcp_connection_info_arr->values,
 					sizeof(struct process_info) *
@@ -1504,17 +1503,19 @@ int select_all_tcp_connection_info(
 
 			SQLITE3_GET(tmp_inet_type, text, 3);
 			if (tmp_inet_type == NULL) {
-				tmp_inet_type = (const unsigned char*) "";
+				tmp_inet_type = (const unsigned char *)"";
 			}
 			tmp_inet_type_len =
 				(int)strlen((const char *)tmp_inet_type) + 1;
 
 			SQLITE3_GET(tmp_direction, text, 8);
 			SQLITE3_GET(tmp_inode, int, 9);
-			if (strcmp((const char*)tmp_direction, "outgoing") == 0) {
+			if (strcmp((const char *)tmp_direction, "outgoing") ==
+			    0) {
 				SQLITE3_GET(tmp_src_addr, text, 4);
 				if (tmp_src_addr == NULL) {
-					tmp_src_addr = (const unsigned char*) "";
+					tmp_src_addr =
+						(const unsigned char *)"";
 				}
 				tmp_src_addr_len =
 					(int)strlen(
@@ -1524,17 +1525,20 @@ int select_all_tcp_connection_info(
 
 				SQLITE3_GET(tmp_dst_addr, text, 6);
 				if (tmp_dst_addr == NULL) {
-					tmp_dst_addr = (const unsigned char*) "";
+					tmp_dst_addr =
+						(const unsigned char *)"";
 				}
 				tmp_dst_addr_len =
 					(int)strlen(
 						(const char *)tmp_dst_addr) +
 					1;
 				SQLITE3_GET(tmp_dst_port, int, 7);
-			} else if (strcmp((const char*)tmp_direction, "incoming") == 0) {
+			} else if (strcmp((const char *)tmp_direction,
+					  "incoming") == 0) {
 				SQLITE3_GET(tmp_src_addr, text, 6);
 				if (tmp_src_addr == NULL) {
-					tmp_src_addr = (const unsigned char*) "";
+					tmp_src_addr =
+						(const unsigned char *)"";
 				}
 				tmp_src_addr_len =
 					(int)strlen(
@@ -1544,7 +1548,8 @@ int select_all_tcp_connection_info(
 
 				SQLITE3_GET(tmp_dst_addr, text, 4);
 				if (tmp_dst_addr == NULL) {
-					tmp_dst_addr = (const unsigned char*) "";
+					tmp_dst_addr =
+						(const unsigned char *)"";
 				}
 				tmp_dst_addr_len =
 					(int)strlen(
@@ -1678,7 +1683,7 @@ int select_all_module_load_info(sqlite3 *db, hashtable_t *ht,
 			if (module_load_info_arr->size ==
 			    module_load_info_arr->max_size) {
 				module_load_info_arr->max_size +=
-					PROCESS_INFO_CHUNK_SIZE;
+					MODULE_LOAD_INFO_CHUNK_SIZE;
 				tmp_values = realloc(
 					module_load_info_arr->values,
 					sizeof(struct process_info) *
@@ -1749,6 +1754,132 @@ int select_all_module_load_info(sqlite3 *db, hashtable_t *ht,
 			module_load_info_arr
 				->values[module_load_info_arr->size - 1]
 				->file_info->s_magic = tmp_s_magic;
+		}
+	}
+
+	err = err == SQLITE_DONE ? CODE_SUCCESS : CODE_FAILED;
+
+	sqlite3_clear_bindings(ppStmt);
+	sqlite3_reset(ppStmt);
+
+	return err;
+}
+
+int select_all_modprobe_overwrite_info(
+	sqlite3 *db, hashtable_t *ht,
+	lua_modprobe_overwrite_info_array *modprobe_overwrite_info_arr,
+	int tgid)
+{
+	int err;
+	sqlite3_stmt *ppStmt;
+	u64_t tmp_event_time;
+	int tmp_syscall;
+	const unsigned char *tmp_process_name;
+	int tmp_process_name_len;
+	const unsigned char *tmp_new_modprobe_path;
+	int tmp_new_modprobe_path_len;
+	struct lua_modprobe_overwrite_info **tmp_values;
+
+	ASSERT(modprobe_overwrite_info_arr != NULL,
+	       "select_all_modprobe_overwrite_info: modprobe_overwrite_info_arr is NULL");
+	ASSERT(modprobe_overwrite_info_arr->values != NULL,
+	       "select_all_modprobe_overwrite_info: modprobe_overwrite_info_arr->values is NULL");
+	ASSERT(modprobe_overwrite_info_arr->size == 0,
+	       "select_all_modprobe_overwrite_info: modprobe_overwrite_info_arr is non-empty");
+
+	ppStmt = (sqlite3_stmt *)hash_get(
+		ht, SELECT_MODPROBE_OVERWRITE_INFO,
+		sizeof(SELECT_MODPROBE_OVERWRITE_INFO));
+	if (ppStmt == NULL) {
+		fprintf(stderr,
+			"select_all_modprobe_overwrite_info: Failed to acquire prepared statement from hashmap.\n");
+		return CODE_FAILED;
+	}
+
+	SQLITE3_BIND_INT("select_all_modprobe_overwrite_info", int, TGID, tgid);
+
+	while (true) {
+		err = sqlite3_step(ppStmt);
+		if (err != SQLITE_ROW) {
+			break;
+		}
+		if (err == SQLITE_ROW) {
+			if (modprobe_overwrite_info_arr->size ==
+			    modprobe_overwrite_info_arr->max_size) {
+				modprobe_overwrite_info_arr->max_size +=
+					MODPROBE_OVERWRITE_INFO_CHUNK_SIZE;
+				tmp_values = realloc(
+					modprobe_overwrite_info_arr->values,
+					sizeof(struct process_info) *
+						(size_t)modprobe_overwrite_info_arr
+							->max_size);
+				if (tmp_values == NULL) {
+					fprintf(stderr,
+						"select_all_modprobe_overwrite_info: Failed to realloc memory for modprobe_overwrite_info_arr->values\n");
+					sqlite3_clear_bindings(ppStmt);
+					sqlite3_reset(ppStmt);
+					return CODE_FAILED;
+				}
+				modprobe_overwrite_info_arr->values =
+					tmp_values;
+			}
+			modprobe_overwrite_info_arr->size += 1;
+			SQLITE3_GET(tmp_event_time, int64, 0);
+			SQLITE3_GET(tmp_syscall, int, 1);
+			SQLITE3_GET(tmp_process_name, text, 2);
+			tmp_process_name_len =
+				(int)strlen((const char *)tmp_process_name) + 1;
+
+			SQLITE3_GET(tmp_new_modprobe_path, text, 3);
+			if (tmp_new_modprobe_path == NULL) {
+				tmp_new_modprobe_path =
+					(const unsigned char *)"";
+			}
+			tmp_new_modprobe_path_len =
+				(int)strlen(
+					(const char *)tmp_new_modprobe_path) +
+				1;
+
+			modprobe_overwrite_info_arr
+				->values[modprobe_overwrite_info_arr->size -
+					 1] = (struct lua_modprobe_overwrite_info
+						       *)
+				malloc(sizeof(
+					struct lua_modprobe_overwrite_info));
+			modprobe_overwrite_info_arr
+				->values[modprobe_overwrite_info_arr->size - 1]
+				->event_info = (struct lua_event_info *)malloc(
+				sizeof(struct lua_event_info));
+			modprobe_overwrite_info_arr
+				->values[modprobe_overwrite_info_arr->size - 1]
+				->event_info->process_name = (char *)malloc(
+				(sizeof(char) * (size_t)tmp_process_name_len));
+			modprobe_overwrite_info_arr
+				->values[modprobe_overwrite_info_arr->size - 1]
+				->event_info->event_time = tmp_event_time;
+			modprobe_overwrite_info_arr
+				->values[modprobe_overwrite_info_arr->size - 1]
+				->event_info->syscall = tmp_syscall;
+			strlcpy(modprobe_overwrite_info_arr
+					->values[modprobe_overwrite_info_arr
+							 ->size -
+						 1]
+					->event_info->process_name,
+				(const char *)tmp_process_name,
+				(size_t)tmp_process_name_len);
+
+			modprobe_overwrite_info_arr
+				->values[modprobe_overwrite_info_arr->size - 1]
+				->new_modprobe_path = (char *)malloc(
+				(sizeof(char) *
+				 (size_t)tmp_new_modprobe_path_len));
+			strlcpy(modprobe_overwrite_info_arr
+					->values[modprobe_overwrite_info_arr
+							 ->size -
+						 1]
+					->new_modprobe_path,
+				(const char *)tmp_new_modprobe_path,
+				(size_t)tmp_new_modprobe_path_len);
 		}
 	}
 

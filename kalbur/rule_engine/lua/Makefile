@@ -18,6 +18,7 @@ PTRACE_INFO := lua_ptrace_info
 SOCKET_CREATE_INFO := lua_socket_create_info
 TCP_CONNECTION_INFO := lua_tcp_connection_info
 MODULE_LOAD_INFO := lua_module_load_info
+MODPROBE_OVERWRITE_INFO := lua_modprobe_overwrite_info
 
 all: $(ENGINE).o \
 	$(EVENT).o \
@@ -33,6 +34,7 @@ all: $(ENGINE).o \
 	$(SOCKET_CREATE_INFO).o \
 	$(TCP_CONNECTION_INFO).o \
 	$(MODULE_LOAD_INFO).o \
+	$(MODPROBE_OVERWRITE_INFO).o \
 
 $(ENGINE).o: $(ENGINE).c $(ENGINE).h
 	$(call msg,LUA_ENGINE,$@)
@@ -89,6 +91,10 @@ $(TCP_CONNECTION_INFO).o: $(TCP_CONNECTION_INFO).c $(TCP_CONNECTION_INFO).h
 $(MODULE_LOAD_INFO).o: $(MODULE_LOAD_INFO).c $(MODULE_LOAD_INFO).h
 	$(call msg,LUA_MODULE_LOAD_INFO,$@)
 	$(Q)$(CC) -DAPPLY_ASSERT $(DEBUG_FLAG) $(CFLAGS) $(INCLUDES) -c $(MODULE_LOAD_INFO).c -o $@
+
+$(MODPROBE_OVERWRITE_INFO).o: $(MODPROBE_OVERWRITE_INFO).c $(MODPROBE_OVERWRITE_INFO).h
+	$(call msg,LUA_MODPROBE_OVERWRITE_INFO,$@)
+	$(Q)$(CC) -DAPPLY_ASSERT $(DEBUG_FLAG) $(CFLAGS) $(INCLUDES) -c $(MODPROBE_OVERWRITE_INFO).c -o $@
 
 clean:
 	$(call msg,CLEAN)

@@ -23,6 +23,8 @@ typedef struct lua_ptrace_info_array lua_ptrace_info_array;
 typedef struct lua_socket_create_info_array lua_socket_create_info_array;
 typedef struct lua_tcp_connection_info_array lua_tcp_connection_info_array;
 typedef struct lua_module_load_info_array lua_module_load_info_array;
+typedef struct lua_modprobe_overwrite_info_array
+	lua_modprobe_overwrite_info_array;
 
 int create_connection(char *dbname, sqlite3 **db, int inmem);
 int initialize_database(char *dbname);
@@ -67,4 +69,8 @@ int select_all_tcp_connection_info(
 int select_all_module_load_info(sqlite3 *db, hashtable_t *ht,
 				lua_module_load_info_array *module_load_info_arr,
 				int tgid);
+int select_all_modprobe_overwrite_info(
+	sqlite3 *db, hashtable_t *ht,
+	lua_modprobe_overwrite_info_array *modprobe_overwrite_info_arr,
+	int tgid);
 #endif // DATABASE_H

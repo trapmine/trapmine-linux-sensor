@@ -39,6 +39,7 @@ RULE_ENGINE = $(DATABASE_DIR)/database.o \
 			$(LUA_DIR)/lua_socket_create_info.o \
 			$(LUA_DIR)/lua_tcp_connection_info.o \
 			$(LUA_DIR)/lua_module_load_info.o \
+			$(LUA_DIR)/lua_modprobe_overwrite_info.o \
 
 HELPERS = $(HASH) $(RULE_ENGINE) $(SYMSEARCH) $(HELPERS_FN) $(SAFE)
 SQLITE3 = $(INC_DIR)/sqlite3.o

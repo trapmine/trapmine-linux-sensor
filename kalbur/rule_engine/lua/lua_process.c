@@ -112,6 +112,9 @@ int process_index(lua_State *L)
 	} else if (IS_ATTR(attr, MODULE_LOAD_INFO)) {
 		lua_pop(L, 1);
 		get_module_load_info(L);
+	} else if (IS_ATTR(attr, MODPROBE_OVERWRITE_INFO)) {
+		lua_pop(L, 1);
+		get_modprobe_overwrite_info(L);
 	} else {
 		fprintf(stderr, "process_index: unknown attribute\n");
 		lua_pop(L, 2);
@@ -197,6 +200,7 @@ int get_process_by_pid(lua_State *L)
 		process_context->socket_create_info_arr = NULL;
 		process_context->tcp_connection_info_arr = NULL;
 		process_context->module_load_info_arr = NULL;
+		process_context->modprobe_overwrite_info_arr = NULL;
 	}
 
 	// sanity checks
@@ -311,6 +315,8 @@ void teardown_process_context(lua_State *L)
 			process_context->tcp_connection_info_arr);
 		delete_lua_module_load_info_array(
 			process_context->module_load_info_arr);
+		delete_lua_modprobe_overwrite_info_array(
+			process_context->modprobe_overwrite_info_arr);
 
 		lua_pop(L, 1);
 	}
