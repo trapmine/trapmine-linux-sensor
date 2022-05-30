@@ -206,6 +206,12 @@ unsigned char SELECT_MODPROBE_OVERWRITE_INFO[] =
 	" FROM events E1 JOIN modprobe_overwrite_info E2 ON E1." EVENT_ID
 	" = E2." EVENT_ID " WHERE E1." TGID " = :" TGID ";";
 
+unsigned char SELECT_PROCESS_LPE_INFO[] =
+	"SELECT E1." EVENT_TIME ", E1." SYSCALL ", E1." COMM
+	", E2." CALLER_RET_ADDR ", E2." TARGET_FUNC
+	" FROM events E1 JOIN lpe E2 ON E1." EVENT_ID " ="
+	" E2." EVENT_ID " WHERE E1." TGID " = :" TGID ";";
+
 unsigned char BEGIN_STMT[] = "BEGIN;";
 unsigned char ROLLBACK_STMT[] = "ROLLBACK;";
 unsigned char COMMIT_STMT[] = "COMMIT;";
@@ -252,6 +258,7 @@ const stmt_t SQL_STMTS[] = {
 	{ SELECT_MODULE_LOAD_INFO, sizeof(SELECT_MODULE_LOAD_INFO) },
 	{ SELECT_MODPROBE_OVERWRITE_INFO,
 	  sizeof(SELECT_MODPROBE_OVERWRITE_INFO) },
+	{ SELECT_PROCESS_LPE_INFO, sizeof(SELECT_PROCESS_LPE_INFO) },
 	// Misc sql statements
 	{ ROLLBACK_STMT, sizeof(ROLLBACK_STMT) },
 	{ COMMIT_STMT, sizeof(COMMIT_STMT) },

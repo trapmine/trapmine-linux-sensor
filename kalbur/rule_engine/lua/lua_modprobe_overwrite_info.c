@@ -117,8 +117,7 @@ int modprobe_overwrite_info_index(lua_State *L)
 		return 1;
 	} else if (IS_ATTR(attribute, NEW_MODPROBE_PATH_ATTR)) {
 		lua_pop(L, 1);
-		lua_pushinteger(L, (lua_Integer)modprobe_overwrite_info
-					   ->new_modprobe_path);
+		lua_pushstring(L, modprobe_overwrite_info->new_modprobe_path);
 		return 1;
 	} else {
 		fprintf(stderr,

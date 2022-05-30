@@ -1890,3 +1890,121 @@ int select_all_modprobe_overwrite_info(
 
 	return err;
 }
+
+int select_all_process_lpe_info(sqlite3 *db, hashtable_t *ht,
+				lua_process_lpe_info_array *process_lpe_info_arr,
+				int tgid)
+{
+	int err;
+	sqlite3_stmt *ppStmt;
+	u64_t tmp_event_time;
+	int tmp_syscall;
+	u64_t tmp_caller_ret_addr;
+	const unsigned char *tmp_process_name;
+	int tmp_process_name_len;
+	const unsigned char *tmp_target_func;
+	int tmp_target_func_len;
+	struct lua_process_lpe_info **tmp_values;
+
+	ASSERT(process_lpe_info_arr != NULL,
+	       "select_all_process_lpe_info: process_lpe_info_arr is NULL");
+	ASSERT(process_lpe_info_arr->values != NULL,
+	       "select_all_process_lpe_info: process_lpe_info_arr->values is NULL");
+	ASSERT(process_lpe_info_arr->size == 0,
+	       "select_all_process_lpe_info: process_lpe_info_arr is non-empty");
+
+	ppStmt = (sqlite3_stmt *)hash_get(ht, SELECT_PROCESS_LPE_INFO,
+					  sizeof(SELECT_PROCESS_LPE_INFO));
+	if (ppStmt == NULL) {
+		fprintf(stderr,
+			"select_all_process_lpe_info: Failed to acquire prepared statement from hashmap.\n");
+		return CODE_FAILED;
+	}
+
+	SQLITE3_BIND_INT("select_all_process_lpe_info", int, TGID, tgid);
+
+	while (true) {
+		err = sqlite3_step(ppStmt);
+		if (err != SQLITE_ROW) {
+			break;
+		}
+		if (err == SQLITE_ROW) {
+			if (process_lpe_info_arr->size ==
+			    process_lpe_info_arr->max_size) {
+				process_lpe_info_arr->max_size +=
+					PROCESS_LPE_INFO_CHUNK_SIZE;
+				tmp_values = realloc(
+					process_lpe_info_arr->values,
+					sizeof(struct process_info) *
+						(size_t)process_lpe_info_arr
+							->max_size);
+				if (tmp_values == NULL) {
+					fprintf(stderr,
+						"select_all_process_lpe_info: Failed to realloc memory for process_lpe_info_arr->values\n");
+					sqlite3_clear_bindings(ppStmt);
+					sqlite3_reset(ppStmt);
+					return CODE_FAILED;
+				}
+				process_lpe_info_arr->values = tmp_values;
+			}
+			process_lpe_info_arr->size += 1;
+			SQLITE3_GET(tmp_event_time, int64, 0);
+			SQLITE3_GET(tmp_syscall, int, 1);
+			SQLITE3_GET(tmp_process_name, text, 2);
+			tmp_process_name_len =
+				(int)strlen((const char *)tmp_process_name) + 1;
+
+			SQLITE3_GET(tmp_caller_ret_addr, int64, 3);
+			SQLITE3_GET(tmp_target_func, text, 4);
+			if (tmp_target_func == NULL) {
+				tmp_target_func = (const unsigned char *)"";
+			}
+			tmp_target_func_len =
+				(int)strlen((const char *)tmp_target_func) + 1;
+
+			process_lpe_info_arr
+				->values[process_lpe_info_arr->size - 1] =
+				(struct lua_process_lpe_info *)malloc(
+					sizeof(struct lua_process_lpe_info));
+			process_lpe_info_arr
+				->values[process_lpe_info_arr->size - 1]
+				->event_info = (struct lua_event_info *)malloc(
+				sizeof(struct lua_event_info));
+			process_lpe_info_arr
+				->values[process_lpe_info_arr->size - 1]
+				->event_info->process_name = (char *)malloc(
+				(sizeof(char) * (size_t)tmp_process_name_len));
+			process_lpe_info_arr
+				->values[process_lpe_info_arr->size - 1]
+				->event_info->event_time = tmp_event_time;
+			process_lpe_info_arr
+				->values[process_lpe_info_arr->size - 1]
+				->event_info->syscall = tmp_syscall;
+			strlcpy(process_lpe_info_arr
+					->values[process_lpe_info_arr->size - 1]
+					->event_info->process_name,
+				(const char *)tmp_process_name,
+				(size_t)tmp_process_name_len);
+
+			process_lpe_info_arr
+				->values[process_lpe_info_arr->size - 1]
+				->caller_ret_addr = tmp_caller_ret_addr;
+			process_lpe_info_arr
+				->values[process_lpe_info_arr->size - 1]
+				->target_func = (char *)malloc(
+				(sizeof(char) * (size_t)tmp_target_func_len));
+			strlcpy(process_lpe_info_arr
+					->values[process_lpe_info_arr->size - 1]
+					->target_func,
+				(const char *)tmp_target_func,
+				(size_t)tmp_target_func_len);
+		}
+	}
+
+	err = err == SQLITE_DONE ? CODE_SUCCESS : CODE_FAILED;
+
+	sqlite3_clear_bindings(ppStmt);
+	sqlite3_reset(ppStmt);
+
+	return err;
+}
