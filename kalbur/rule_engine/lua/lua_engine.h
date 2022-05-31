@@ -2,6 +2,8 @@
 #define LUA_ENGINE_H
 
 #include "rule_manager.h"
+#include "engine.h"
+#include <lua_process.h>
 #include <lua.h>
 #include <message.h>
 
@@ -10,7 +12,7 @@ struct lua_engine {
 	struct rules_manager *manager;
 };
 
-int apply_rules(struct lua_engine *e, struct message_state *ms);
+int apply_rules(struct engine *e, struct message_state *ms);
 struct lua_engine *initialize_new_lua_engine(struct rules_manager *manager);
 struct rules_manager *init_rules_manager(char *config_file);
 

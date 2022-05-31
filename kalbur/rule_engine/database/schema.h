@@ -20,7 +20,8 @@
 
 // Columns
 #define EVENT_TIME "event_time"
-#define TGID_PID "tgid_pid"
+#define TGID "tgid"
+#define PID "pid"
 #define SYSCALL "syscall"
 #define COMM "process_name"
 #define EVENT_ID "event_id" // alias for rowid
@@ -30,7 +31,8 @@
 	"CREATE TABLE events( \
 				" EVENT_ID " INTEGER PRIMARY KEY, \
 				" EVENT_TIME " UINT64_T NOT NULL, \
-				" TGID_PID " UINT64_T NOT NULL, \
+				" TGID " UINT64_T NOT NULL, \
+				" PID " UINT64_T NOT NULL, \
 				" SYSCALL " INTEGER NOT NULL, \
 				" COMM " TEXT \
 		      	);"
@@ -78,7 +80,8 @@
 /* Process info table */
 
 // Columns
-#define PPID "ppid"
+#define PARENT_TGID "parent_tgid"
+#define PARENT_PID "parent_pid"
 #define ARGS "args"
 #define INTERPRETER "interpreter"
 #define UID "uid"
@@ -98,7 +101,9 @@
 	"CREATE TABLE process_info(						\
 		" EVENT_ID                                                     \
 	" INTEGER PRIMARY KEY, 				\
-		" PPID                                                         \
+		" PARENT_TGID                                                  \
+	" UINT64_T,						\
+		" PARENT_PID                                                   \
 	" UINT64_T,						\
 		" CLONE_FLAGS                                                  \
 	" UINT64_T, 					\
@@ -188,14 +193,16 @@
 /* ptrace event table */
 #define REQUEST "request"
 #define ADDR "address"
-#define TARGET "target_tgid_pid"
+#define TARGET_TGID "target_tgid"
+#define TARGET_PID "target_pid"
 
 #define PTRACE_TABLE                                                           \
 	"CREATE table ptrace_event(\
 			" EVENT_ID " INTEGER PRIMARY KEY, \
 			" REQUEST " UINT64_T,\
 			" ADDR " UINT64_T,\
-			" TARGET " UINT64_T,\
+			" TARGET_TGID " UINT64_T,\
+			" TARGET_PID " UINT64_T,\
 			FOREIGN KEY(" EVENT_ID ") REFERENCES events(" EVENT_ID \
 	")\
 			);"

@@ -51,7 +51,7 @@ void process_message(struct message_state *ms, struct engine *e)
 
 	if (should_process_rules(ms)) {
 		ASSERT(ms->event_id, "process_message: ms->event_id == 0");
-		err = apply_rules(e->le, ms);
+		err = apply_rules(e, ms);
 		transition_ms_progress(ms, MS_RULES_PROCESSED, err);
 	}
 

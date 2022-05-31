@@ -42,11 +42,12 @@ const char *CREATE_STMTS[] = {
 // #### SQL STATEMENTS ####
 // ########################
 
-unsigned char INSERT_EVENT[] = "INSERT INTO events(\
-				" EVENT_TIME "," TGID_PID "," SYSCALL "," COMM
-			       ") \
-				VALUES(:" EVENT_TIME ",:" TGID_PID ",:" SYSCALL
-			       ",:" COMM ") RETURNING " EVENT_ID ";";
+unsigned char INSERT_EVENT[] =
+	"INSERT INTO events(\
+				" EVENT_TIME "," TGID "," PID "," SYSCALL
+	"," COMM ") \
+				VALUES(:" EVENT_TIME ",:" TGID ",:" PID
+	",:" SYSCALL ",:" COMM ") RETURNING " EVENT_ID ";";
 
 unsigned char INSERT_FILE_INFO[] = "INSERT INTO file_info(\
 					" FILENAME "," INODE_NUMBER "," S_MAGIC
@@ -65,10 +66,11 @@ unsigned char INSERT_PROC_MMAP[] = "INSERT INTO proc_mmap(\
 
 unsigned char INSERT_PROCESS_INFO[] =
 	"INSERT INTO process_info(\
-					" EVENT_ID "," PPID "," CLONE_FLAGS
-	"," FILE_ID "," ARGS "," ENV "," INTERPRETER "," UID "," GID "," EUID
-	"," EGID "," STDIN_INODE "," STDIN_TYPE "," STDOUT_INODE "," STDOUT_TYPE
-	"," STDERR_INODE "," STDERR_TYPE ") VALUES(:" EVENT_ID ",:" PPID
+					" EVENT_ID "," PARENT_TGID
+	"," PARENT_PID "," CLONE_FLAGS "," FILE_ID "," ARGS "," ENV
+	"," INTERPRETER "," UID "," GID "," EUID "," EGID "," STDIN_INODE
+	"," STDIN_TYPE "," STDOUT_INODE "," STDOUT_TYPE "," STDERR_INODE
+	"," STDERR_TYPE ") VALUES(:" EVENT_ID ",:" PARENT_TGID ",:" PARENT_PID
 	",:" CLONE_FLAGS ",:" FILE_ID ",:" ARGS ",:" ENV ",:" INTERPRETER
 	",:" UID ",:" GID ",:" EUID ",:" EGID ",:" STDIN_INODE ",:" STDIN_TYPE
 	",:" STDOUT_INODE ",:" STDOUT_TYPE ",:" STDERR_INODE ",:" STDERR_TYPE
@@ -92,8 +94,9 @@ unsigned char INSERT_LPE_INFO[] =
 	") VALUES (:" EVENT_ID ",:" CALLER_RET_ADDR ",:" TARGET_FUNC ");";
 
 unsigned char INSERT_PTRACE_INFO[] =
-	"INSERT INTO ptrace_event(" EVENT_ID "," REQUEST "," ADDR "," TARGET
-	") VALUES(:" EVENT_ID ",:" REQUEST ",:" ADDR ",:" TARGET ");";
+	"INSERT INTO ptrace_event(" EVENT_ID "," REQUEST "," ADDR
+	"," TARGET_TGID "," TARGET_PID ") VALUES(:" EVENT_ID ",:" REQUEST
+	",:" ADDR ",:" TARGET_TGID ",:" TARGET_PID ");";
 
 unsigned char INSERT_MODULE_INFO[] =
 	"INSERT INTO module_load(" EVENT_ID "," FILE_ID ") VALUES(:" EVENT_ID
@@ -133,15 +136,16 @@ unsigned char SELECT_STDIN_BY_STDOUT[] =
 	" from process_info WHERE " STDIN_INODE " = :" STDIN_INODE ";";
 
 unsigned char SELECT_TGID_BY_EVENT_ID[] =
-	"SELECT " TGID_PID " from events WHERE " EVENT_ID " = :" EVENT_ID ";";
+	"SELECT " TGID ", " PID " from events WHERE " EVENT_ID " = :" EVENT_ID
+	";";
 
 unsigned char SELECT_IF_SOCK_CONN_EXISTS[] =
-	"SELECT " EVENT_ID " FROM events WHERE " TGID_PID " = :" TGID_PID
-	" and syscall = 41;";
+	"SELECT " EVENT_ID " FROM events WHERE " TGID " = :" TGID " AND " PID
+	" = :" PID " and syscall = 41;";
 
 unsigned char SELECT_EVENT_IDS_BY_TGID[] =
-	"SELECT " EVENT_ID " FROM events where TGID_PID = :" TGID_PID
-	" and (syscall = 9 or syscall = 59);";
+	"SELECT " EVENT_ID " FROM events where " TGID " = :" TGID " AND " PID
+	" = :" PID " and (syscall = 9 or syscall = 59);";
 
 unsigned char SELECT_VM_INFO_BY_EVENT_ID[] =
 	"SELECT " VM_BASE ", " VM_LEN ", " VM_PROT
@@ -152,6 +156,61 @@ unsigned char SELECT_COMM_BY_EVENT_ID[] =
 
 unsigned char SELECT_COMM[] =
 	"SELECT " COMM " FROM disallowed WHERE " COMM " = :" COMM ";";
+
+unsigned char SELECT_PROCESS_INFO[] =
+	"SELECT E1." EVENT_TIME ", E1." SYSCALL ", E1." COMM ", E2." PARENT_TGID
+	", E2." CLONE_FLAGS ", E2." ARGS ", E2." ENV ", E2." INTERPRETER
+	", E2." UID ", E2." GID ", E2." EUID ", E2." EGID ", E2." STDIN_INODE
+	", E2." STDIN_TYPE ", E2." STDOUT_INODE ", E2." STDOUT_TYPE
+	", E2." STDERR_INODE ", E2." STDERR_TYPE ", E3." FILENAME
+	", E3." INODE_NUMBER ", E3." S_MAGIC " FROM events E1"
+	" JOIN process_info E2 ON E1." EVENT_ID " = E2." EVENT_ID
+	" JOIN file_info E3 ON E2." FILE_ID " = E3." FILE_ID " WHERE E1." TGID
+	" = :" TGID ";";
+
+unsigned char SELECT_MMAP_INFO[] =
+	"SELECT E1." EVENT_TIME ", E1." SYSCALL ", E1." COMM ", E2." VM_BASE
+	", E2." VM_FLAGS ", E2." VM_PROT ", E2." VM_LEN ", E3." FILENAME
+	", E3." INODE_NUMBER ", E3." S_MAGIC " FROM events E1 JOIN proc_mmap E2"
+	" ON E1." EVENT_ID " = E2." EVENT_ID " JOIN file_info E3 ON E2." FILE_ID
+	" = E3." FILE_ID " WHERE E1." TGID " = :" TGID ";";
+
+unsigned char SELECT_PTRACE_INFO[] =
+	"SELECT E1." EVENT_TIME ", E1." SYSCALL ", E1." COMM ", E2." REQUEST
+	", E2." ADDR ", E2." TARGET_TGID " FROM events E1"
+	" JOIN ptrace_event E2 ON E1." EVENT_ID " = E2." EVENT_ID " WHERE"
+	" E1." TGID " = :" TGID ";";
+
+unsigned char SELECT_SOCKET_CREATE_INFO[] =
+	"SELECT E1." EVENT_TIME ", E1." SYSCALL ", E1." COMM
+	", E2." INODE_NUMBER ", E2." FAMILY ", E2." SOCK_TYPE
+	" FROM events E1 JOIN socket_create_info E2"
+	" ON E1." EVENT_ID " = E2." EVENT_ID " WHERE E1." TGID " = :" TGID ";";
+
+unsigned char SELECT_TCP_CONNECTION_INFO[] =
+	"SELECT E1." EVENT_TIME ", E1." SYSCALL ", E1." COMM ", E2." TYPE
+	", E2." SADDR ", E2." SPORT ", E2." DADDR ", E2." DPORT
+	", E2." DIRECTION ", E2." SOCK_INODE
+	" FROM events E1 JOIN tcp_connection_info E2 ON E1." EVENT_ID
+	" = E2." EVENT_ID " WHERE E1." TGID " = :" TGID ";";
+
+unsigned char SELECT_MODULE_LOAD_INFO[] =
+	"SELECT E1." EVENT_TIME ", E1." SYSCALL ", E1." COMM ", E3." FILENAME
+	", E3." INODE_NUMBER ", E3." S_MAGIC
+	" FROM events E1 JOIN module_load E2 ON E1." EVENT_ID " = E2." EVENT_ID
+	" JOIN file_info E3 ON E2." FILE_ID " = E3." FILE_ID " WHERE E1." TGID
+	" = :" TGID ";";
+
+unsigned char SELECT_MODPROBE_OVERWRITE_INFO[] =
+	"SELECT E1." EVENT_TIME ", E1." SYSCALL ", E1." COMM ", E2." PATH_NAME
+	" FROM events E1 JOIN modprobe_overwrite_info E2 ON E1." EVENT_ID
+	" = E2." EVENT_ID " WHERE E1." TGID " = :" TGID ";";
+
+unsigned char SELECT_PROCESS_LPE_INFO[] =
+	"SELECT E1." EVENT_TIME ", E1." SYSCALL ", E1." COMM
+	", E2." CALLER_RET_ADDR ", E2." TARGET_FUNC
+	" FROM events E1 JOIN lpe E2 ON E1." EVENT_ID " ="
+	" E2." EVENT_ID " WHERE E1." TGID " = :" TGID ";";
 
 unsigned char BEGIN_STMT[] = "BEGIN;";
 unsigned char ROLLBACK_STMT[] = "ROLLBACK;";
@@ -190,6 +249,16 @@ const stmt_t SQL_STMTS[] = {
 	{ SELECT_VM_INFO_BY_EVENT_ID, sizeof(SELECT_VM_INFO_BY_EVENT_ID) },
 	{ SELECT_COMM_BY_EVENT_ID, sizeof(SELECT_COMM_BY_EVENT_ID) },
 	{ SELECT_COMM, sizeof(SELECT_COMM) },
+	// Join statements
+	{ SELECT_PROCESS_INFO, sizeof(SELECT_PROCESS_INFO) },
+	{ SELECT_MMAP_INFO, sizeof(SELECT_MMAP_INFO) },
+	{ SELECT_PTRACE_INFO, sizeof(SELECT_PTRACE_INFO) },
+	{ SELECT_SOCKET_CREATE_INFO, sizeof(SELECT_SOCKET_CREATE_INFO) },
+	{ SELECT_TCP_CONNECTION_INFO, sizeof(SELECT_TCP_CONNECTION_INFO) },
+	{ SELECT_MODULE_LOAD_INFO, sizeof(SELECT_MODULE_LOAD_INFO) },
+	{ SELECT_MODPROBE_OVERWRITE_INFO,
+	  sizeof(SELECT_MODPROBE_OVERWRITE_INFO) },
+	{ SELECT_PROCESS_LPE_INFO, sizeof(SELECT_PROCESS_LPE_INFO) },
 	// Misc sql statements
 	{ ROLLBACK_STMT, sizeof(ROLLBACK_STMT) },
 	{ COMMIT_STMT, sizeof(COMMIT_STMT) },
