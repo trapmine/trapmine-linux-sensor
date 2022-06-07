@@ -128,16 +128,7 @@ struct syscall_execve_ctx {
 	long envp_str_arr_ptr;
 };
 
-struct syscall_enter_fork_ctx {
-	u64 unused;
-	int syscall_nr;
-};
 
-struct syscall_enter_clone_ctx {
-	u64 unused;
-	int syscall_nr;
-	unsigned long clone_flags;
-};
 struct syscall_enter_mmap_ctx {
 	u64 unused;
 	int syscall_nr;
