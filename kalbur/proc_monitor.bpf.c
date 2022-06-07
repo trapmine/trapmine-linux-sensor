@@ -2528,8 +2528,6 @@ get_registers(struct task_struct *task, struct pt_regs **regs)
 SEC("tracepoint/syscalls/sys_exit_vfork")
 int tracepoint__syscalls__sys_exit_vfork(struct syscall_exit_fork_clone_ctx *ctx)
 {
-	CHECK_SYSCALL_RET(ctx->pid);
-handle_exit:
 	handle_fork_clone_exit(ctx);
 	return 0;
 }
@@ -2537,8 +2535,14 @@ handle_exit:
 SEC("tracepoint/syscalls/sys_exit_clone")
 int tracepoint__syscalls__sys_exit_clone(struct syscall_exit_fork_clone_ctx *ctx)
 {
-	CHECK_SYSCALL_RET(ctx->pid);
-handle_exit:
+	handle_fork_clone_exit(ctx);
+	return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_clone3")
+int tracepoint__syscalls__sys_exit_clone3(
+	struct syscall_exit_fork_clone_ctx *ctx)
+{
 	handle_fork_clone_exit(ctx);
 	return 0;
 }
@@ -2546,9 +2550,39 @@ handle_exit:
 SEC("tracepoint/syscalls/sys_exit_fork")
 int tracepoint__syscalls__sys_exit_fork(struct syscall_exit_fork_clone_ctx *ctx)
 {
-	CHECK_SYSCALL_RET(ctx->pid);
-handle_exit:
 	handle_fork_clone_exit(ctx);
+	return 0;
+}
+
+SEC("tracepoint/syscalls/sys_enter_vfork")
+int tracepoint__syscalls__sys_enter_vfork(
+	struct syscall_enter_fork_clone_ctx *ctx)
+{
+	handle_fork_clone_enter(ctx->syscall_nr);
+	return 0;
+}
+
+SEC("tracepoint/syscalls/sys_enter_clone")
+int tracepoint__syscalls__sys_enter_clone(
+	struct syscall_enter_fork_clone_ctx *ctx)
+{
+	handle_fork_clone_enter(ctx->syscall_nr);
+	return 0;
+}
+
+SEC("tracepoint/syscalls/sys_enter_clone3")
+int tracepoint__syscalls__sys_enter_clone3(
+	struct syscall_enter_fork_clone_ctx *ctx)
+{
+	handle_fork_clone_enter(ctx->syscall_nr);
+	return 0;
+}
+
+SEC("tracepoint/syscalls/sys_enter_fork")
+int tracepoint__syscalls__sys_enter_fork(
+	struct syscall_enter_fork_clone_ctx *ctx)
+{
+	handle_fork_clone_enter(ctx->syscall_nr);
 	return 0;
 }
 
