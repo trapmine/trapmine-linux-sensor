@@ -1709,83 +1709,6 @@ out:
 	return;
 }
 
-__attribute__((always_inline)) static void
-handle_fork_clone_exit(struct syscall_exit_fork_clone_ctx *ctx)
-{
-	int err;
-	struct file *f;
-	struct task_struct *tsk;
-	struct cred *credentials;
-	u64 tgid_pid, pathlen_offset;
-	event_t emeta;
-	struct process_info pinfo = { 0 };
-
-	// Check if returning from newly created process
-	// or not. If not, then exit.
-	if (ctx->pid != 0)
-		goto out;
-
-	tgid_pid = bpf_get_current_pid_tgid();
-
-	err = initialize_event(&emeta, tgid_pid, ctx->syscall_nr);
-	if (err < 0) {
-		bpf_printk("1) Failed to init event: %d\n", err);
-	}
-	JUMP_TARGET(out);
-
-	// initialize event header. Set the tgid_pid of the new process
-	initialize_event_header(&pinfo.eh, tgid_pid, ctx->syscall_nr);
-
-	err = initialize_str_buffer(&pinfo.eh, ctx->syscall_nr,
-				    pinfo.eh.tgid_pid, emeta.wbuff);
-	JUMP_TARGET(handle_sys_exit);
-
-	// set interpreter to null
-	pinfo.interp_str_offset = LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE);
-
-	// set file path
-	tsk = (struct task_struct *)bpf_get_current_task();
-	if (tsk == 0)
-		goto out;
-
-	f = get_underlying_file_of_task(tsk);
-	if (f != NULL) {
-		pathlen_offset = save_file_path(f, &emeta);
-		pinfo.file.file_offset = pathlen_offset & 0xffffffff;
-		pinfo.file.path_len = pathlen_offset >> 32;
-
-		save_file_info(f, &pinfo.file);
-	}
-
-	// copy credentials
-	err = bpf_core_read(&credentials, sizeof(struct cred *), &tsk->cred);
-	if (err >= 0) {
-		save_credentials(credentials, &pinfo);
-	}
-
-	// save args, and environment
-	copy_args_env(&emeta, &pinfo);
-
-	// set stdio
-	get_standard_pipes_inodes(&pinfo);
-
-	// emit process_info struct to userspace
-	err = bpf_perf_event_output(ctx, &streamer, BPF_F_CURRENT_CPU, &pinfo,
-				    sizeof(struct process_info));
-	if (err >= 0) {
-		bpf_printk("2) Sent to userspace\n");
-	}
-	JUMP_TARGET(handle_sys_exit);
-
-	// emit string data to userspace
-	err = output_arr_to_streamer(ctx, &str_buffs_map, PER_CPU_STR_BUFFSIZE,
-				     &emeta);
-handle_sys_exit:
-	handle_syscall_exit(NULL, &emeta, tgid_pid);
-out:
-	return;
-}
-
 __attribute__((always_inline)) static int
 initialize_dump_bin(mmap_dump_buff_t *out, u64 event_time, u64 vm_base,
 		    u64 vm_len)
@@ -2667,6 +2590,76 @@ handle_fork_clone_enter(int syscall_nr)
 
 	err = bpf_map_update_elem(&proc_info_map, &tgid_pid, &pinfo,
 				  BPF_NOEXIST);
+out:
+	return;
+}
+
+// generic handler for syscall exit tracepoints of fork family
+__attribute__((always_inline)) static void
+handle_fork_clone_exit(struct syscall_exit_fork_clone_ctx *ctx)
+{
+	long err;
+	u64 tgid_pid;
+	event_t *emeta;
+	event_t new_emeta = { 0 };
+	struct file *f;
+	struct process_info *pinfo;
+	struct process_info new_pinfo = { 0 };
+	struct task_struct *current;
+	u64 ppid;
+	u64 pathlen_offset;
+
+	tgid_pid = bpf_get_current_pid_tgid();
+
+	// get event metadata struct from bpf map
+	GET_EVENT_METADATA(emeta, "handle_fork_clone_exit");
+
+	// if this is a child, pid is 0. we do nothing. as in map we only have parent.
+	// or if there is an error
+	if (ctx->pid <= 0) {
+		goto handle_sys_exit;
+	}
+
+	// get process info from bpf map
+	pinfo = (struct process_info *)bpf_map_lookup_elem(&proc_info_map,
+							   &tgid_pid);
+	if (pinfo == NULL) {
+		goto handle_sys_exit;
+	}
+
+	err = bpf_probe_read(&new_pinfo, sizeof(struct process_info), pinfo);
+	JUMP_TARGET(handle_sys_exit);
+
+	get_standard_pipes_inodes(&new_pinfo);
+
+	current = (struct task_struct *)bpf_get_current_task();
+	if (current == 0)
+		goto handle_sys_exit;
+
+	new_pinfo.args.present = 1;
+	new_pinfo.env.present = 1;
+	copy_args_env(emeta, &new_pinfo);
+
+	f = get_underlying_file_of_task(current);
+	if (f != NULL) {
+		pathlen_offset = save_file_path(f, emeta);
+		new_pinfo.file.file_offset = pathlen_offset & 0xffffffff;
+		new_pinfo.file.path_len = pathlen_offset >> 32;
+
+		save_file_info(f, &new_pinfo.file);
+	}
+
+	// emit process_info struct to userspace
+	err = bpf_perf_event_output(ctx, &streamer, BPF_F_CURRENT_CPU,
+				    &new_pinfo, sizeof(struct process_info));
+	JUMP_TARGET(handle_sys_exit);
+
+	// emit string data to userspace
+	err = output_arr_to_streamer(ctx, &str_buffs_map, PER_CPU_STR_BUFFSIZE,
+				     emeta, new_pinfo.eh.tgid_pid);
+
+handle_sys_exit:
+	handle_syscall_exit(&proc_info_map, emeta, tgid_pid);
 out:
 	return;
 }
