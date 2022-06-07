@@ -128,7 +128,6 @@ struct syscall_execve_ctx {
 	long envp_str_arr_ptr;
 };
 
-
 struct syscall_enter_mmap_ctx {
 	u64 unused;
 	int syscall_nr;
@@ -405,11 +404,11 @@ set_buff_indx(u32 buff_num, u32 str_value, u32 mmap_value, u32 lock)
 		return -EBPFLOOKUPFAIL;
 
 	new_tracker.curr_str_indx = str_value == PRESERVE_STR_INDX ?
-						  tracker->curr_str_indx :
-						  str_value;
+					    tracker->curr_str_indx :
+					    str_value;
 	new_tracker.curr_mmap_indx = mmap_value == PRESERVE_MMAP_INDX ?
-						   tracker->curr_mmap_indx :
-						   mmap_value;
+					     tracker->curr_mmap_indx :
+					     mmap_value;
 	new_tracker.locked = lock;
 
 	return bpf_map_update_elem(&buff_tracker_map, &buff_num, &new_tracker,
