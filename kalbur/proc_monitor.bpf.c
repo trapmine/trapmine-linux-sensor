@@ -2599,7 +2599,7 @@ handle_fork_clone_exit(struct syscall_exit_fork_clone_ctx *ctx)
 {
 	long err;
 	u64 tgid_pid;
-	event_t *emeta;
+	event_t *emeta = NULL;
 	event_t new_emeta = { 0 };
 	struct file *f;
 	struct process_info *pinfo;
@@ -2610,14 +2610,14 @@ handle_fork_clone_exit(struct syscall_exit_fork_clone_ctx *ctx)
 
 	tgid_pid = bpf_get_current_pid_tgid();
 
-	// get event metadata struct from bpf map
-	GET_EVENT_METADATA(emeta, "handle_fork_clone_exit");
-
 	// if this is a child, pid is 0. we do nothing. as in map we only have parent.
 	// or if there is an error
 	if (ctx->pid <= 0) {
 		goto handle_sys_exit;
 	}
+
+	// get event metadata struct from bpf map
+	GET_EVENT_METADATA(emeta, "handle_fork_clone_exit");
 
 	// get process info from bpf map
 	pinfo = (struct process_info *)bpf_map_lookup_elem(&proc_info_map,
@@ -2658,7 +2658,8 @@ handle_fork_clone_exit(struct syscall_exit_fork_clone_ctx *ctx)
 				     emeta, new_pinfo.eh.tgid_pid);
 
 handle_sys_exit:
-	handle_syscall_exit(&proc_info_map, emeta, tgid_pid);
+	if (emeta != NULL)
+		handle_syscall_exit(&proc_info_map, emeta, tgid_pid);
 out:
 	return;
 }
