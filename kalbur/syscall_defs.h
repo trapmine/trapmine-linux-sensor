@@ -17,6 +17,7 @@
 #define SYS_FORK __NR_fork
 #define SYS_VFORK __NR_vfork
 #define SYS_CLONE __NR_clone
+#define SYS_CLONE3 __NR_clone3
 #define SYS_MPROTECT __NR_mprotect
 #ifdef SYS_SOCKET
 #undef SYS_SOCKET
@@ -51,7 +52,7 @@
 
 #define IS_FORK_OR_FRIENDS(syscall)                                            \
 	((syscall == SYS_FORK) || (syscall == SYS_VFORK) ||                    \
-	 (syscall == SYS_CLONE))
+	 (syscall == SYS_CLONE) || (syscall == SYS_CLONE3))
 
 #define IS_EVENT_HANDLED(syscall)                                              \
 	((IS_SYSCALL_HANDLED(syscall)) || (syscall == DUMP_MMAP_DATA) ||       \
