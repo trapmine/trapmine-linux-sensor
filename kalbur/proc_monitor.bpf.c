@@ -147,10 +147,9 @@ struct syscall_exit_fork_clone_ctx {
 		// the actual pid seen by host system??)
 };
 
-struct syscall_enter_clone3_args {
+struct syscall_enter_fork_clone_ctx {
 	u64 unused;
 	int syscall_nr;
-	struct clone_args *uargs;
 };
 
 struct syscall_enter_mprotect {
