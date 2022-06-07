@@ -2525,6 +2525,110 @@ get_registers(struct task_struct *task, struct pt_regs **regs)
 	return 0;
 }
 
+// wake_up_new_task is called in kernel_clone with the new task as its argument
+// We hook this to get the new task's tgid_pid and ppid and store it
+SEC("kprobe/wake_up_new_task")
+int kretprobe__copy_process(struct pt_regs *ctx)
+{
+	u64 tgid_pid;
+	struct process_info *pinfo;
+	struct process_info new_pinfo = { 0 };
+	long err;
+	struct task_struct *child;
+	struct task_struct *current;
+	struct pt_regs *user_regs;
+	int syscall_nr;
+	u32 child_pid;
+	u64 child_tgid_pid;
+
+	// get userspace registers
+	current = bpf_get_current_task_btf();
+	err = get_registers(current, &user_regs);
+	JUMP_TARGET(out);
+
+	// read orig_ax register which has syscall nr in it.
+	err = bpf_core_read(&syscall_nr, sizeof(syscall_nr),
+			    &(user_regs->orig_ax));
+	JUMP_TARGET(out);
+
+	// if syscall is not fork family, we do nothing.
+	if (syscall_nr != __NR_clone && syscall_nr != __NR_clone3 &&
+	    syscall_nr != __NR_fork && syscall_nr != __NR_vfork)
+		goto out;
+
+	// get process info
+	tgid_pid = bpf_get_current_pid_tgid();
+	pinfo = (struct process_info *)bpf_map_lookup_elem(&proc_info_map,
+							   &tgid_pid);
+	if (pinfo == NULL)
+		goto out;
+
+	// copy into new process_info struct
+	err = bpf_probe_read(&new_pinfo, sizeof(struct process_info), pinfo);
+	JUMP_TARGET(out);
+
+	// get child task_struct from the function argument
+	child = (struct task_struct *)PT_REGS_PARM1(ctx);
+	if (child == NULL)
+		goto out;
+
+	// get child ppid and tgid_pid
+	new_pinfo.ppid = get_ppid_of_task(child);
+
+	err = bpf_core_read(&child_tgid_pid, sizeof(child_tgid_pid),
+			    &(child->tgid));
+	JUMP_TARGET(out);
+
+	err = bpf_core_read(&child_pid, sizeof(child_pid), &(child->pid));
+	JUMP_TARGET(out);
+	new_pinfo.eh.tgid_pid = (child_tgid_pid << 32) | child_pid;
+
+	// store new process_info struct
+	err = bpf_map_update_elem(&proc_info_map, &tgid_pid, &new_pinfo,
+				  BPF_EXIST);
+out:
+	return 0;
+}
+
+// kernel_clone is called in fork/clone/clone3/vfork syscalls
+// We hook it to get clone_flags
+SEC("kprobe/kernel_clone")
+int kprobe__kernel_clone(struct pt_regs *ctx)
+{
+	struct kernel_clone_args *clone_args;
+	u64 tgid_pid;
+	struct process_info *pinfo;
+	struct process_info new_pinfo = { 0 };
+	struct stdio io;
+	long err;
+
+	// get tgid_pid
+	tgid_pid = bpf_get_current_pid_tgid();
+
+	// get clone_args struct from registers (1st arg of kernel_clone)
+	clone_args = (struct kernel_clone_args *)PT_REGS_PARM1(ctx);
+
+	// get process_info struct from bpf map
+	pinfo = (struct process_info *)bpf_map_lookup_elem(&proc_info_map,
+							   &tgid_pid);
+	if (pinfo == NULL)
+		goto out;
+
+	// copy into new process_info struct
+	err = bpf_probe_read(&new_pinfo, sizeof(struct process_info), pinfo);
+	JUMP_TARGET(out);
+
+	// read clone_flags from clone_args struct
+	err = bpf_probe_read_kernel(&(new_pinfo.clone_flags),
+				    sizeof(new_pinfo.clone_flags), clone_args);
+	JUMP_TARGET(out);
+
+	// put new process_info struct into bpf map
+	err = bpf_map_update_elem(&proc_info_map, &tgid_pid, &new_pinfo,
+				  BPF_EXIST);
+out:
+	return 0;
+}
 
 // generic handler for syscall entry tracepoints of fork family
 __attribute__((always_inline)) static void
