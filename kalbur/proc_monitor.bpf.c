@@ -2525,6 +2525,48 @@ get_registers(struct task_struct *task, struct pt_regs **regs)
 	return 0;
 }
 
+
+// generic handler for syscall entry tracepoints of fork family
+__attribute__((always_inline)) static void
+handle_fork_clone_enter(int syscall_nr)
+{
+	long err;
+	u64 tgid_pid;
+	event_t emeta;
+	struct process_info pinfo = { 0 };
+	struct task_struct *tsk;
+	struct cred *credentials;
+
+	tgid_pid = bpf_get_current_pid_tgid();
+
+	err = initialize_event(&emeta, tgid_pid, syscall_nr);
+	JUMP_TARGET(out);
+
+	// initialize event header. Set the tgid_pid of the new process
+	initialize_event_header(&pinfo.eh, tgid_pid, syscall_nr);
+
+	err = initialize_str_buffer(&pinfo.eh, syscall_nr, pinfo.eh.tgid_pid,
+				    emeta.wbuff);
+	JUMP_TARGET(out);
+
+	// set interpreter to null
+	pinfo.interp_str_offset = LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE);
+
+	// get current task
+	tsk = (struct task_struct *)bpf_get_current_task();
+
+	// copy credentials
+	err = bpf_core_read(&credentials, sizeof(struct cred *), &(tsk->cred));
+	if (err >= 0) {
+		save_credentials(credentials, &pinfo);
+	}
+
+	err = bpf_map_update_elem(&proc_info_map, &tgid_pid, &pinfo,
+				  BPF_NOEXIST);
+out:
+	return;
+}
+
 SEC("tracepoint/syscalls/sys_exit_vfork")
 int tracepoint__syscalls__sys_exit_vfork(struct syscall_exit_fork_clone_ctx *ctx)
 {
