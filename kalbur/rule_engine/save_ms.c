@@ -518,6 +518,8 @@ int save_msg(sqlite3 *db, hashtable_t *hash_table, struct message_state *ms)
 		return save_fork_and_friends_event(db, hash_table, ms);
 	case (SYS_CLONE):
 		return save_fork_and_friends_event(db, hash_table, ms);
+	case (SYS_CLONE3):
+		return save_fork_and_friends_event(db, hash_table, ms);
 	case (SYS_PTRACE):
 		return save_ptrace_event(db, hash_table, ms);
 	case (SYS_FINIT_MODULE):
