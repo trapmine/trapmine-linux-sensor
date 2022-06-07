@@ -1305,9 +1305,11 @@ out:
 	return err;
 }
 
+// new_tgid_pid should be set if we want to change tgid_pid in the buffer
+// otherwise set it to 0.
 __attribute__((always_inline)) static long
 output_arr_to_streamer(void *ctx, void *buffer_map, u64 buff_size,
-		       event_t *emeta)
+		       event_t *emeta, u64 new_tgid_pid)
 {
 	u32 indx;
 	long err;
@@ -1338,6 +1340,14 @@ output_arr_to_streamer(void *ctx, void *buffer_map, u64 buff_size,
 	bytes_written = (u32)err;
 	if (bytes_written > buff_size)
 		goto out;
+
+	// set new tgid_pid if we want to change it
+	if (new_tgid_pid != 0) {
+		bpf_core_read(&(buffer->buff[indx]) +
+				      offsetof(struct probe_event_header,
+					       tgid_pid),
+			      sizeof(new_tgid_pid), &new_tgid_pid);
+	}
 
 	err = bpf_perf_event_output(ctx, &streamer, BPF_F_CURRENT_CPU,
 				    &(buffer->buff[indx]),
@@ -2477,12 +2487,12 @@ int tracepoint__syscalls__sys_exit_execve(struct syscall_exit *ctx)
 
 	// output string buffer
 	err = output_arr_to_streamer(ctx, &str_buffs_map, PER_CPU_STR_BUFFSIZE,
-				     emeta);
+				     emeta, 0);
 	JUMP_TARGET(handle_exit);
 
 	// output mmap buffer
 	err = output_arr_to_streamer(ctx, &mmap_buffs_map, (MMAP_BUFFSIZE),
-				     emeta);
+				     emeta, 0);
 
 handle_exit:
 	handle_syscall_exit(&proc_info_map, emeta, tgid_pid);
@@ -3140,7 +3150,7 @@ int tracepoint__syscall__sys_exit_finit_module(struct syscall_exit *ctx)
 	JUMP_TARGET(handle_exit);
 
 	err = output_arr_to_streamer(ctx, &str_buffs_map,
-				     (PER_CPU_STR_BUFFSIZE), emeta);
+				     (PER_CPU_STR_BUFFSIZE), emeta, 0);
 	JUMP_TARGET(handle_exit);
 
 handle_exit:
