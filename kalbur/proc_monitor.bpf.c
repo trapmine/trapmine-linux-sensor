@@ -2508,6 +2508,23 @@ out:
 	return 0;
 }
 
+// get userspace registers for a task
+__attribute__((always_inline)) static long
+get_registers(struct task_struct *task, struct pt_regs **regs)
+{
+	u64 __ptr;
+	long err;
+
+	err = bpf_core_read(&__ptr, sizeof(__ptr), &(task->stack));
+	if (err < 0)
+		return err;
+
+	__ptr += THREAD_SIZE - TOP_OF_KERNEL_STACK_PADDING;
+	*regs = ((struct pt_regs *)__ptr) - 1;
+
+	return 0;
+}
+
 SEC("tracepoint/syscalls/sys_exit_vfork")
 int tracepoint__syscalls__sys_exit_vfork(struct syscall_exit_fork_clone_ctx *ctx)
 {
