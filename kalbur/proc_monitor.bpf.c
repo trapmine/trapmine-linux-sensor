@@ -2315,7 +2315,7 @@ int kprobe__security_bprm_check(struct pt_regs *ctx)
 	if (new_pinfo.file.s_magic == TMPFS_MAGIC)
 		new_pinfo.dump = 1;
 
-	err = bpf_core_read(&credentials, sizeof(struct creds), &lbprm->cred);
+	err = bpf_core_read(&credentials, sizeof(struct cred *), &lbprm->cred);
 	JUMP_TARGET(out);
 	err = save_credentials(credentials, &new_pinfo);
 
