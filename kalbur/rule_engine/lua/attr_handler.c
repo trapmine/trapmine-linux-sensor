@@ -135,6 +135,9 @@ ATTRIBUTE_HANDLER(push_proc_launch_attr)
 		if (io.type == STD_SOCK) {
 			sprintf(std, "socket-%lu", io.std_ino);
 			lua_pushstring(L, std);
+		} else if (io.type == STD_PIPE) {
+			sprintf(std, "pipe-%lu", io.std_ino);
+			lua_pushstring(L, std);
 		} else {
 			lua_pushnil(L);
 		}
@@ -142,7 +145,9 @@ ATTRIBUTE_HANDLER(push_proc_launch_attr)
 		io = pinfo->io[STDOUT_INDX];
 		if (io.type == STD_SOCK) {
 			sprintf(std, "socket-%lu", io.std_ino);
-			printf("Inside attr handler: %s\n", std);
+			lua_pushstring(L, std);
+		} else if (io.type == STD_PIPE) {
+			sprintf(std, "pipe-%lu", io.std_ino);
 			lua_pushstring(L, std);
 		} else {
 			lua_pushnil(L);
@@ -151,6 +156,9 @@ ATTRIBUTE_HANDLER(push_proc_launch_attr)
 		io = pinfo->io[STDERR_INDX];
 		if (io.type == STD_SOCK) {
 			sprintf(std, "socket-%lu", io.std_ino);
+			lua_pushstring(L, std);
+		} else if (io.type == STD_PIPE) {
+			sprintf(std, "pipe-%lu", io.std_ino);
 			lua_pushstring(L, std);
 		} else {
 			lua_pushnil(L);
