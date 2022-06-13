@@ -45,7 +45,7 @@ typedef uint8_t u8_t;
 #define TYPED_MACRO(value, type) CALL(TYPED, value, type)
 
 //#define PER_CPU_STR_BUFFSIZE TYPED_MACRO((1 << 10), UL)
-#define PER_CPU_STR_BUFFSIZE (1 << 12)
+#define PER_CPU_STR_BUFFSIZE (1 << 12) | (1 << 10)
 #define LAST_NULL_BYTE(buffsize) ((buffsize)-1)
 
 #define PRESERVE_32_MSB(quad_word) ((quad_word >> 32) << 32)
