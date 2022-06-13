@@ -2014,7 +2014,8 @@ int select_tgid_by_event_id(sqlite3 *db, hashtable_t *ht, int event_id)
 	int tgid, err;
 	sqlite3_stmt *ppStmt;
 
-	ppStmt = hash_get(ht, SELECT_TGID_BY_EVENT_ID, sizeof(SELECT_TGID_BY_EVENT_ID));
+	ppStmt = hash_get(ht, SELECT_TGID_BY_EVENT_ID,
+			  sizeof(SELECT_TGID_BY_EVENT_ID));
 	if (ppStmt == NULL) {
 		fprintf(stderr,
 			"select_tgid_by_event_id: Failed to acquire prepared statement from hashmap.\n");
@@ -2036,20 +2037,23 @@ int select_tgid_by_event_id(sqlite3 *db, hashtable_t *ht, int event_id)
 	return tgid;
 }
 
-int select_stdout_by_stdin(sqlite3 *db, hashtable_t *ht, int *stdin_inode, int *event_id, char **filename, int *filename_size)
+int select_stdout_by_stdin(sqlite3 *db, hashtable_t *ht, int *stdin_inode,
+			   int *event_id, char **filename, int *filename_size)
 {
 	int err;
 	const unsigned char *tmp_filename;
 	sqlite3_stmt *ppStmt;
 
-	ppStmt = hash_get(ht, SELECT_STDOUT_BY_STDIN, sizeof(SELECT_STDOUT_BY_STDIN));
+	ppStmt = hash_get(ht, SELECT_STDOUT_BY_STDIN,
+			  sizeof(SELECT_STDOUT_BY_STDIN));
 	if (ppStmt == NULL) {
 		fprintf(stderr,
 			"select_stdout_by_stdin: Failed to acquire prepared statement from hashmap.\n");
 		return CODE_FAILED;
 	}
 
-	SQLITE3_BIND_INT("select_stdout_by_stdin", int, STDOUT_INODE, *stdin_inode);
+	SQLITE3_BIND_INT("select_stdout_by_stdin", int, STDOUT_INODE,
+			 *stdin_inode);
 
 	err = sqlite3_step(ppStmt);
 	if (err != SQLITE_ROW) {
@@ -2076,20 +2080,23 @@ out:
 	return err;
 }
 
-int select_stdin_by_stdout(sqlite3 *db, hashtable_t *ht, int *stdout_inode, int *event_id, char **filename, int *filename_size)
+int select_stdin_by_stdout(sqlite3 *db, hashtable_t *ht, int *stdout_inode,
+			   int *event_id, char **filename, int *filename_size)
 {
 	int err;
 	const unsigned char *tmp_filename;
 	sqlite3_stmt *ppStmt;
 
-	ppStmt = hash_get(ht, SELECT_STDIN_BY_STDOUT, sizeof(SELECT_STDIN_BY_STDOUT));
+	ppStmt = hash_get(ht, SELECT_STDIN_BY_STDOUT,
+			  sizeof(SELECT_STDIN_BY_STDOUT));
 	if (ppStmt == NULL) {
 		fprintf(stderr,
 			"select_stdin_by_stdout: Failed to acquire prepared statement from hashmap.\n");
 		return CODE_FAILED;
 	}
 
-	SQLITE3_BIND_INT("select_stdin_by_stdout", int, STDIN_INODE, *stdout_inode);
+	SQLITE3_BIND_INT("select_stdin_by_stdout", int, STDIN_INODE,
+			 *stdout_inode);
 
 	err = sqlite3_step(ppStmt);
 	if (err != SQLITE_ROW) {

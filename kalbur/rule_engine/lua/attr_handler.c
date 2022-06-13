@@ -17,11 +17,12 @@
 #define IS_ATTR(attr_name, attr) strncmp(attr_name, attr, sizeof(attr)) == 0
 
 #define EVENT_ID "eventId"
-static int push_event_id(lua_State *L,  const char *attr_name, struct message_state *event_obj)
+static int push_event_id(lua_State *L, const char *attr_name,
+			 struct message_state *event_obj)
 {
 	if (IS_ATTR(attr_name, EVENT_ID)) {
 		lua_pushinteger(L, (lua_Integer)event_obj->event_id);
-		return CODE_SUCCESS;	
+		return CODE_SUCCESS;
 	}
 
 	return CODE_FAILED;
@@ -123,11 +124,11 @@ ATTRIBUTE_HANDLER(push_proc_launch_attr)
 			lua_pushnil(L);
 		}
 	} else if (IS_ATTR(attr_name, INTERP)) {
-		interp = get_interpreter_string(string_data, pinfo->interp_str_offset);
+		interp = get_interpreter_string(string_data,
+						pinfo->interp_str_offset);
 		if (interp != NULL) {
 			lua_pushstring(L, interp);
-		}
-		else {
+		} else {
 			lua_pushnil(L);
 		}
 	} else if (IS_ATTR(attr_name, STDIN)) {
@@ -408,4 +409,3 @@ push_attr_fn get_push_attr_fn(int syscall)
 
 	return NULL;
 }
-

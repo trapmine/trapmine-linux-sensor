@@ -98,13 +98,13 @@ static void initialize_state(lua_State *l)
 {
 	luaopen_base(l);
 	luaopen_string(l);
-	lua_setglobal(l,"string");
+	lua_setglobal(l, "string");
 	luaopen_utf8(l);
-	lua_setglobal(l,"utf8");
+	lua_setglobal(l, "utf8");
 	luaopen_table(l);
-	lua_setglobal(l,"table");
+	lua_setglobal(l, "table");
 	luaopen_math(l);
-	lua_setglobal(l,"math");
+	lua_setglobal(l, "math");
 }
 
 struct lua_engine *

@@ -240,7 +240,6 @@ fail:
 	return 1;
 }
 
-
 /**
  * @brief get_stdout_by_stdin. returns next stdin, event_id, filename
  * Stack: [-1, +3]
@@ -272,7 +271,8 @@ int get_stdout_by_stdin(lua_State *L)
 	ASSERT(db != NULL, "get_stdout_by_stdin: db not found");
 
 	// get next stdin, event_id, filename
-	err = select_stdout_by_stdin(db->db, db->sqlite_stmts, &stdin_inode, &event_id, &filename, &filename_len);
+	err = select_stdout_by_stdin(db->db, db->sqlite_stmts, &stdin_inode,
+				     &event_id, &filename, &filename_len);
 	if (err == CODE_FAILED) {
 		lua_pushnil(L);
 		lua_pushnil(L);
@@ -291,7 +291,7 @@ out:
 		free(filename);
 		filename = NULL;
 	}
-	
+
 	return 3;
 }
 
@@ -326,7 +326,8 @@ int get_stdin_by_stdout(lua_State *L)
 	ASSERT(db != NULL, "get_stdin_by_stdout: db not found");
 
 	// get next stdin, event_id, filename
-	err = select_stdin_by_stdout(db->db, db->sqlite_stmts, &stdout_inode, &event_id, &filename, &filename_len);
+	err = select_stdin_by_stdout(db->db, db->sqlite_stmts, &stdout_inode,
+				     &event_id, &filename, &filename_len);
 	if (err == CODE_FAILED) {
 		lua_pushnil(L);
 		lua_pushnil(L);
@@ -345,7 +346,7 @@ out:
 		free(filename);
 		filename = NULL;
 	}
-	
+
 	return 3;
 }
 
@@ -429,7 +430,6 @@ void init_process_context(lua_State *L, sqlite3 *db, hashtable_t *sqlite_stmts)
 	lua_pushcfunction(L, get_pid_by_event_id);
 	lua_setglobal(L, "get_pid_by_event_id");
 
-	// // expose global get_parent function
 	// expose global pid list to keep reference of all process contexts
 	lua_pushstring(L, GLOBAL_PID_LIST);
 	lua_newtable(L);
@@ -477,7 +477,8 @@ void teardown_process_context(lua_State *L)
 			process_context->module_load_info_arr);
 		delete_lua_modprobe_overwrite_info_array(
 			process_context->modprobe_overwrite_info_arr);
-		delete_lua_process_lpe_info_array(process_context->process_lpe_info_arr);
+		delete_lua_process_lpe_info_array(
+			process_context->process_lpe_info_arr);
 
 		lua_pop(L, 1);
 	}

@@ -22,7 +22,7 @@ char *get_interpreter_string(char *string_data, uint32_t offset)
 {
 	char *interp;
 
-	if(string_data == NULL)
+	if (string_data == NULL)
 		return NULL;
 
 	if (offset == LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE))
