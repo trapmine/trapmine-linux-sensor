@@ -77,4 +77,5 @@ int select_all_modprobe_overwrite_info(
 int select_all_process_lpe_info(sqlite3 *db, hashtable_t *ht,
 				lua_process_lpe_info_array *process_lpe_info_arr,
 				int tgid);
+int select_tgid_by_event_id(sqlite3 *db, hashtable_t *ht, int event_id);
 #endif // DATABASE_H

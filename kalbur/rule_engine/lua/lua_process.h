@@ -53,6 +53,7 @@ void get_global_pid(lua_State *L, int pid);
 
 int process_index(lua_State *L);
 int get_process_by_pid(lua_State *L);
+int get_pid_by_event_id(lua_State *L);
 
 void teardown_process_context(lua_State *L);
 void init_process_context(lua_State *L, sqlite3 *db, hashtable_t *sqlite_stmts);

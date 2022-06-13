@@ -2008,3 +2008,31 @@ int select_all_process_lpe_info(sqlite3 *db, hashtable_t *ht,
 
 	return err;
 }
+
+int select_tgid_by_event_id(sqlite3 *db, hashtable_t *ht, int event_id)
+{
+	int tgid, err;
+	sqlite3_stmt *ppStmt;
+
+	ppStmt = hash_get(ht, SELECT_TGID_BY_EVENT_ID, sizeof(SELECT_TGID_BY_EVENT_ID));
+	if (ppStmt == NULL) {
+		fprintf(stderr,
+			"select_tgid_by_event_id: Failed to acquire prepared statement from hashmap.\n");
+		return CODE_FAILED;
+	}
+
+	SQLITE3_BIND_INT("select_tgid_by_event_id", int, EVENT_ID, event_id);
+
+	err = sqlite3_step(ppStmt);
+
+	if (err == SQLITE_ROW)
+		tgid = sqlite3_column_int(ppStmt, 0);
+	else
+		tgid = CODE_FAILED;
+
+	sqlite3_clear_bindings(ppStmt);
+	sqlite3_reset(ppStmt);
+
+	return tgid;
+}
+

@@ -240,6 +240,44 @@ fail:
 	return 1;
 }
 
+
+/**
+ * @brief Get pid of the process associated with the given event id
+ * Stack: [-1, +1]
+ * 
+ * @param L 
+ * @param event_id
+ * @return number of return values (1)
+ */
+int get_pid_by_event_id(lua_State *L)
+{
+	int pid;
+	int event_id;
+	struct lua_db *db;
+
+	// git event id argument
+	event_id = (int)luaL_checkinteger(L, -1);
+	if (event_id == 0) {
+		fprintf(stderr,
+			"get_process_by_pid: invalid arg to get_pid_by_event_id");
+		lua_pushnil(L);
+	}
+	lua_pop(L, 1);
+	// stack is reset
+
+	db = get_lua_db(L);
+	ASSERT(db != NULL, "get_pid_by_event_id: db not found");
+
+	pid = select_tgid_by_event_id(db->db, db->sqlite_stmts, event_id);
+	if (pid == CODE_FAILED) {
+		lua_pushnil(L);
+		return 1;
+	}
+
+	lua_pushinteger(L, (lua_Integer)pid);
+	return 1;
+}
+
 /**
  * @brief Initializes the process context by setting up lua_db, global
  * functions, and the global pid list.
