@@ -420,6 +420,16 @@ void init_process_context(lua_State *L, sqlite3 *db, hashtable_t *sqlite_stmts)
 	lua_pushcfunction(L, get_process_by_pid);
 	lua_setglobal(L, "get_process_by_pid");
 
+	lua_pushcfunction(L, get_stdin_by_stdout);
+	lua_setglobal(L, "get_stdin_by_stdout");
+
+	lua_pushcfunction(L, get_stdout_by_stdin);
+	lua_setglobal(L, "get_stdout_by_stdin");
+
+	lua_pushcfunction(L, get_pid_by_event_id);
+	lua_setglobal(L, "get_pid_by_event_id");
+
+	// // expose global get_parent function
 	// expose global pid list to keep reference of all process contexts
 	lua_pushstring(L, GLOBAL_PID_LIST);
 	lua_newtable(L);
