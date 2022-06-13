@@ -132,7 +132,7 @@ unsigned char SELECT_STDOUT_BY_STDIN[] =
 	" from process_info WHERE " STDOUT_INODE " = :" STDOUT_INODE ";";
 
 unsigned char SELECT_STDIN_BY_STDOUT[] =
-	"SELECT " STDOUT_INODE ", " EVENT_ID
+	"SELECT " STDOUT_INODE ", " EVENT_ID ", " FILE_ID
 	" from process_info WHERE " STDIN_INODE " = :" STDIN_INODE ";";
 
 unsigned char SELECT_TGID_BY_EVENT_ID[] =
