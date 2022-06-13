@@ -140,6 +140,6 @@ $(PROC_MONITOR).o: $(PROC_MONITOR).c $(wildcard %.h) $(PROC_MONITOR).skel.h
 # Build application binary
 $(PROC_MONITOR): $(PRELIM_TARGETS) $(SUPPORT) $(THIRD_PARTY)
 	$(call msg,CC,$@)
-	$(Q)$(CC) -static $(CFLAGS) $(INCLUDES) $(HELPERS) $(PRELIM_TARGETS) $(THIRD_PARTY) $(PROC_MONITOR_LINK_FLAGS) -o $@
+	$(Q)$(CC) -static $(CFLAGS) $(INCLUDES) $(DEBUG_FLAG) $(HELPERS) $(PRELIM_TARGETS) $(THIRD_PARTY) $(PROC_MONITOR_LINK_FLAGS) -o $@
 
 .PHONY: all clean
