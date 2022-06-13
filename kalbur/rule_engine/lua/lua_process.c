@@ -242,6 +242,114 @@ fail:
 
 
 /**
+ * @brief get_stdout_by_stdin. returns next stdin, event_id, filename
+ * Stack: [-1, +3]
+ * 
+ * @param L 
+ * @param event_id
+ * @return number of return values (1)
+ */
+int get_stdout_by_stdin(lua_State *L)
+{
+	int stdin_inode;
+	int event_id;
+	int filename_len;
+	char *filename = NULL;
+	struct lua_db *db;
+	int err;
+
+	// git stdin inode argument
+	stdin_inode = (int)luaL_checkinteger(L, -1);
+	if (stdin_inode == 0) {
+		fprintf(stderr,
+			"get_stdout_by_stdin: invalid arg to get_stdout_by_stdin");
+		lua_pushnil(L);
+	}
+	lua_pop(L, 1);
+	// stack is reset
+
+	db = get_lua_db(L);
+	ASSERT(db != NULL, "get_stdout_by_stdin: db not found");
+
+	// get next stdin, event_id, filename
+	err = select_stdout_by_stdin(db->db, db->sqlite_stmts, &stdin_inode, &event_id, &filename, &filename_len);
+	if (err == CODE_FAILED) {
+		lua_pushnil(L);
+		lua_pushnil(L);
+		lua_pushnil(L);
+
+		goto out;
+	}
+
+	// push stdin, event_id, filename
+	lua_pushinteger(L, (lua_Integer)stdin_inode);
+	lua_pushinteger(L, (lua_Integer)event_id);
+	lua_pushlstring(L, filename, (size_t)filename_len);
+
+out:
+	if (filename != NULL) {
+		free(filename);
+		filename = NULL;
+	}
+	
+	return 3;
+}
+
+/**
+ * @brief get_stdin_by_stdout. returns next stdout, event_id, filename
+ * Stack: [-1, +3]
+ * 
+ * @param L 
+ * @param event_id
+ * @return number of return values (1)
+ */
+int get_stdin_by_stdout(lua_State *L)
+{
+	int stdout_inode;
+	int event_id;
+	int filename_len;
+	char *filename = NULL;
+	struct lua_db *db;
+	int err;
+
+	// git stdout inode argument
+	stdout_inode = (int)luaL_checkinteger(L, -1);
+	if (stdout_inode == 0) {
+		fprintf(stderr,
+			"get_stdin_by_stdout: invalid arg to get_stdin_by_stdout");
+		lua_pushnil(L);
+	}
+	lua_pop(L, 1);
+	// stack is reset
+
+	db = get_lua_db(L);
+	ASSERT(db != NULL, "get_stdin_by_stdout: db not found");
+
+	// get next stdin, event_id, filename
+	err = select_stdin_by_stdout(db->db, db->sqlite_stmts, &stdout_inode, &event_id, &filename, &filename_len);
+	if (err == CODE_FAILED) {
+		lua_pushnil(L);
+		lua_pushnil(L);
+		lua_pushnil(L);
+
+		goto out;
+	}
+
+	// push stdin, event_id, filename
+	lua_pushinteger(L, (lua_Integer)stdout_inode);
+	lua_pushinteger(L, (lua_Integer)event_id);
+	lua_pushlstring(L, filename, (size_t)filename_len);
+
+out:
+	if (filename != NULL) {
+		free(filename);
+		filename = NULL;
+	}
+	
+	return 3;
+}
+
+/**
  * @brief Get pid of the process associated with the given event id
  * Stack: [-1, +1]
  * 

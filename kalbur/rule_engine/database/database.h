@@ -78,4 +78,6 @@ int select_all_process_lpe_info(sqlite3 *db, hashtable_t *ht,
 				lua_process_lpe_info_array *process_lpe_info_arr,
 				int tgid);
 int select_tgid_by_event_id(sqlite3 *db, hashtable_t *ht, int event_id);
+int select_stdout_by_stdin(sqlite3 *db, hashtable_t *ht, int *stdin_inode, int *event_id, char **filename, int *filename_size);
+int select_stdin_by_stdout(sqlite3 *db, hashtable_t *ht, int *stdout_inode, int *event_id, char **filename, int *filename_size);
 #endif // DATABASE_H

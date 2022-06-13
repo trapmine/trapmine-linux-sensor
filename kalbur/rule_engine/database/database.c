@@ -2036,3 +2036,82 @@ int select_tgid_by_event_id(sqlite3 *db, hashtable_t *ht, int event_id)
 	return tgid;
 }
 
+int select_stdout_by_stdin(sqlite3 *db, hashtable_t *ht, int *stdin_inode, int *event_id, char **filename, int *filename_size)
+{
+	int err;
+	const unsigned char *tmp_filename;
+	sqlite3_stmt *ppStmt;
+
+	ppStmt = hash_get(ht, SELECT_STDOUT_BY_STDIN, sizeof(SELECT_STDOUT_BY_STDIN));
+	if (ppStmt == NULL) {
+		fprintf(stderr,
+			"select_stdout_by_stdin: Failed to acquire prepared statement from hashmap.\n");
+		return CODE_FAILED;
+	}
+
+	SQLITE3_BIND_INT("select_stdout_by_stdin", int, STDOUT_INODE, *stdin_inode);
+
+	err = sqlite3_step(ppStmt);
+	if (err != SQLITE_ROW) {
+		err = CODE_FAILED;
+		goto out;
+	}
+
+	SQLITE3_GET(*stdin_inode, int, 0);
+	SQLITE3_GET(*event_id, int, 1);
+	SQLITE3_GET(tmp_filename, text, 2);
+	if (tmp_filename == NULL) {
+		tmp_filename = (const unsigned char *)"";
+	}
+	*filename_size = (int)strlen((const char *)tmp_filename) + 1;
+	*filename = (char *)malloc(sizeof(char) * (size_t)*filename_size);
+	strlcpy(*filename, (const char *)tmp_filename, (size_t)*filename_size);
+
+	err = CODE_SUCCESS;
+
+out:
+	sqlite3_clear_bindings(ppStmt);
+	sqlite3_reset(ppStmt);
+
+	return err;
+}
+
+int select_stdin_by_stdout(sqlite3 *db, hashtable_t *ht, int *stdout_inode, int *event_id, char **filename, int *filename_size)
+{
+	int err;
+	const unsigned char *tmp_filename;
+	sqlite3_stmt *ppStmt;
+
+	ppStmt = hash_get(ht, SELECT_STDIN_BY_STDOUT, sizeof(SELECT_STDIN_BY_STDOUT));
+	if (ppStmt == NULL) {
+		fprintf(stderr,
+			"select_stdin_by_stdout: Failed to acquire prepared statement from hashmap.\n");
+		return CODE_FAILED;
+	}
+
+	SQLITE3_BIND_INT("select_stdin_by_stdout", int, STDIN_INODE, *stdout_inode);
+
+	err = sqlite3_step(ppStmt);
+	if (err != SQLITE_ROW) {
+		err = CODE_FAILED;
+		goto out;
+	}
+
+	SQLITE3_GET(*stdout_inode, int, 0);
+	SQLITE3_GET(*event_id, int, 1);
+	SQLITE3_GET(tmp_filename, text, 2);
+	if (tmp_filename == NULL) {
+		tmp_filename = (const unsigned char *)"";
+	}
+	*filename_size = (int)strlen((const char *)tmp_filename) + 1;
+	*filename = (char *)malloc(sizeof(char) * (size_t)*filename_size);
+	strlcpy(*filename, (const char *)tmp_filename, (size_t)*filename_size);
+
+	err = CODE_SUCCESS;
+
+out:
+	sqlite3_clear_bindings(ppStmt);
+	sqlite3_reset(ppStmt);
+
+	return err;
+}
