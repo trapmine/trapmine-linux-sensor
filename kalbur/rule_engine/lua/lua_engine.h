@@ -3,6 +3,7 @@
 
 #include "rule_manager.h"
 #include "engine.h"
+#include "lua_helpers.h"
 #include <lua_process.h>
 #include <lua.h>
 #include <message.h>

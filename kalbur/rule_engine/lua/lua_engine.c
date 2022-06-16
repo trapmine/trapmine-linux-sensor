@@ -75,8 +75,9 @@ int apply_rules(struct engine *e, struct message_state *ms)
 	event_rls = le->manager->event_rls;
 	ASSERT(event_rls != NULL, "process_rule: event_rls == NULL");
 
+	init_helpers(le->L, e->db, e->sqlite_stmts);
 	setup_event_context(le->L, ms);
-	init_process_context(le->L, e->db, e->sqlite_stmts);
+	init_process_context(le->L);
 
 	// evaluate rule for any event
 	r = event_rls[LUA_ANY];
@@ -88,6 +89,7 @@ int apply_rules(struct engine *e, struct message_state *ms)
 	if (r != NULL)
 		evaluate_rule_list(le->L, r);
 
+	teardown_helpers(le->L);
 	teardown_event_context(le->L);
 	teardown_process_context(le->L);
 

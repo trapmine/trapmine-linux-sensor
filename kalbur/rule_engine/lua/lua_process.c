@@ -1,29 +1,6 @@
 #include "lua_process.h"
 
 /**
- * @brief Get the global lua db object
- * Stack: [-0, +0]
- * 
- * @param L The lua state.
- *
- * @return A pointer to the lua_db object
- */
-struct lua_db *get_lua_db(lua_State *L)
-{
-	struct lua_db *db;
-
-	lua_pushstring(L, GLOBAL_LUA_DB);
-	lua_gettable(L, LUA_REGISTRYINDEX);
-	ASSERT(lua_isuserdata(L, -1), "get_lua_db: global db conn not found");
-
-	db = (struct lua_db *)lua_touserdata(L, -1);
-	ASSERT(db != NULL, "get_lua_db: global db conn not found");
-	lua_pop(L, 1);
-
-	return db;
-}
-
-/**
  * @brief Get the global pid list object.
  * Stack: [-0, +1]
  * 
@@ -388,34 +365,14 @@ int get_pid_by_event_id(lua_State *L)
 }
 
 /**
- * @brief Initializes the process context by setting up lua_db, global
+ * @brief Initializes the process context by setting global
  * functions, and the global pid list.
  * 
  * @param L 
  */
-void init_process_context(lua_State *L, sqlite3 *db, hashtable_t *sqlite_stmts)
+void init_process_context(lua_State *L)
 {
-	struct lua_db *lua_db;
-
 	ASSERT(L != NULL, "init_process_context: L == NULL");
-	ASSERT(db != NULL, "init_process_context: db == NULL");
-	ASSERT(sqlite_stmts != NULL,
-	       "init_process_context: sqlite_stmts == NULL");
-
-	// initialize lua_db globally and put it in registry.
-	lua_pushstring(L, GLOBAL_LUA_DB);
-	lua_db = (struct lua_db *)lua_newuserdata(L, sizeof(struct lua_db));
-	if (lua_db == NULL) {
-		fprintf(stderr,
-			"init_process_context: could not initialize lua_db");
-		lua_pop(L, 1);
-		return;
-	}
-
-	lua_db->db = db;
-	lua_db->sqlite_stmts = sqlite_stmts;
-
-	lua_settable(L, LUA_REGISTRYINDEX);
 
 	// expose global get_process_by_pid function
 	lua_pushcfunction(L, get_process_by_pid);
