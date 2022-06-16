@@ -55,6 +55,7 @@ static int push_event_header_attr(lua_State *L, const char *attr_name,
 #define PPID "ppid"
 #define CLONE_FLAGS "cloneFlags"
 #define FILENAME "filename"
+#define FILEMAGIC "fileMagic"
 #define CMDLINE "cmdline"
 #define ENV "env"
 #define INTERP "interpreter"
@@ -99,6 +100,8 @@ ATTRIBUTE_HANDLER(push_proc_launch_attr)
 		} else {
 			lua_pushnil(L);
 		}
+	} else if (IS_ATTR(attr_name, FILEMAGIC)) {
+		lua_pushnumber(L, (lua_Number)pinfo->file.s_magic);
 	} else if (IS_ATTR(attr_name, CMDLINE)) {
 		if (string_data == NULL)
 			return;
