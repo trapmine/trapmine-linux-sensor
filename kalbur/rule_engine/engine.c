@@ -57,7 +57,7 @@ void process_message(struct message_state *ms, struct engine *e)
 
 #ifdef __DEBUG__
 	struct probe_event_header *eh = ms->primary_data;
-	if (IS_EXIT_EVENT(eh->syscall_nr)) {
+	if (IS_SYSCALL_HANDLED(eh->syscall_nr)) {
 		printf("alert tag: %lu\n", ms->tags[0]);
 		printf("hashlookup: %lu\n", ms->tags[1]);
 	}
