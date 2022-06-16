@@ -1,5 +1,34 @@
 #include "lua_helpers.h"
 
+int is_disallowed_parent(lua_State *L)
+{
+	int is_disallowed;
+	struct lua_db *db;
+	const char *comm;
+
+	if (!lua_isstring(L, -1)) {
+		fprintf(stderr, "is_disallowed_parent: stack[-1] not string\n");
+		lua_pop(L, 1);
+		lua_pushnil(L);
+		return 1;
+	}
+
+	comm = lua_tostring(L, -1);
+
+	db = get_lua_db(L);
+	is_disallowed =
+		select_comm_in_diasllowed(db->db, db->sqlite_stmts, comm);
+
+	if (is_disallowed == CODE_FAILED) {
+		lua_pop(L, 1);
+		lua_pushnil(L);
+		return 1;
+	}
+
+	lua_pop(L, 1);
+	lua_pushboolean(L, is_disallowed);
+	return 1;
+}
 
 /**
  * @brief Get the global lua db object

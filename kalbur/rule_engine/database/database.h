@@ -82,4 +82,5 @@ int select_stdout_by_stdin(sqlite3 *db, hashtable_t *ht, int *stdin_inode,
 			   int *event_id, char **filename, int *filename_size);
 int select_stdin_by_stdout(sqlite3 *db, hashtable_t *ht, int *stdout_inode,
 			   int *event_id, char **filename, int *filename_size);
+int select_comm_in_diasllowed(sqlite3 *db, hashtable_t *ht, const char *comm);
 #endif // DATABASE_H

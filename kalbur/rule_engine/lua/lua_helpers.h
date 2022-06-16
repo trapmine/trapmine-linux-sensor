@@ -17,6 +17,7 @@ struct lua_db {
 	hashtable_t *sqlite_stmts;
 };
 
+int is_disallowed_parent(lua_State *L);
 
 struct lua_db *get_lua_db(lua_State *L);
 

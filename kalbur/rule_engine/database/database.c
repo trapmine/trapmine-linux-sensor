@@ -2122,3 +2122,33 @@ out:
 
 	return err;
 }
+
+int select_comm_in_diasllowed(sqlite3 *db, hashtable_t *ht, const char *comm)
+{
+	int err;
+	sqlite3_stmt *ppStmt;
+
+	ppStmt = hash_get(ht, SELECT_COMM, sizeof(SELECT_COMM));
+	if (ppStmt == NULL) {
+		fprintf(stderr,
+			"select_comm_in_diasllowed: Failed to acquire prepared statement from hashmap.\n");
+		return CODE_FAILED;
+	}
+
+	SQLITE3_BIND_STR("insert_file_info", text, COMM, comm);
+
+	err = sqlite3_step(ppStmt);
+	if (err != SQLITE_ROW) {
+		// if there is no row in result, we return false
+		err = 0;
+		goto out;
+	}
+
+	// if there is row in result, comm matches some row in disallowed table, we return trues
+	err = 1;
+out:
+	sqlite3_clear_bindings(ppStmt);
+	sqlite3_reset(ppStmt);
+
+	return err;
+}
