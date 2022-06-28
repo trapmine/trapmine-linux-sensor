@@ -124,7 +124,7 @@ struct mprotect_info {
 	size_t len;
 };
 
-enum STD_TYPE { STD_NONE, STD_SOCK, STD_PIPE };
+enum STD_TYPE { STD_NONE, STD_SOCK, STD_PIPE, STD_TTY };
 
 #define STDIN_INDX 0
 #define STDOUT_INDX 1
@@ -235,5 +235,6 @@ typedef union {
 #define TCP_PROT 2
 #define INET_OPS 3
 #define PIPE_FOPS 4
+#define TTY_FOPS 5
 
 #endif
