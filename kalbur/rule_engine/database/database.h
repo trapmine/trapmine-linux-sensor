@@ -79,8 +79,10 @@ int select_all_process_lpe_info(sqlite3 *db, hashtable_t *ht,
 				int tgid);
 int select_tgid_by_event_id(sqlite3 *db, hashtable_t *ht, int event_id);
 int select_stdout_by_stdin(sqlite3 *db, hashtable_t *ht, int *stdin_inode,
-			   int *event_id, char **filename, int *filename_size);
+			   int *stdin_type, int *event_id, char **filename,
+			   int *filename_size);
 int select_stdin_by_stdout(sqlite3 *db, hashtable_t *ht, int *stdout_inode,
-			   int *event_id, char **filename, int *filename_size);
+			   int *stdout_type, int *event_id, char **filename,
+			   int *filename_size);
 int select_comm_in_diasllowed(sqlite3 *db, hashtable_t *ht, const char *comm);
 #endif // DATABASE_H

@@ -228,7 +228,9 @@ fail:
 int get_stdout_by_stdin(lua_State *L)
 {
 	int stdin_inode;
+	int stdin_type;
 	int event_id;
+	char std[64];
 	int filename_len;
 	char *filename = NULL;
 	struct lua_db *db;
@@ -249,7 +251,8 @@ int get_stdout_by_stdin(lua_State *L)
 
 	// get next stdin, event_id, filename
 	err = select_stdout_by_stdin(db->db, db->sqlite_stmts, &stdin_inode,
-				     &event_id, &filename, &filename_len);
+				     &stdin_type, &event_id, &filename,
+				     &filename_len);
 	if (err == CODE_FAILED) {
 		lua_pushnil(L);
 		lua_pushnil(L);
@@ -259,9 +262,20 @@ int get_stdout_by_stdin(lua_State *L)
 	}
 
 	// push stdin, event_id, filename
-	lua_pushinteger(L, (lua_Integer)stdin_inode);
+	if (stdin_type == STD_SOCK) {
+		sprintf(std, "socket-%d", stdin_inode);
+		lua_pushstring(L, std);
+	} else if (stdin_type == STD_PIPE) {
+		sprintf(std, "pipe-%d", stdin_inode);
+		lua_pushstring(L, std);
+	} else if (stdin_type == STD_TTY) {
+		sprintf(std, "tty-%d", stdin_inode);
+		lua_pushstring(L, std);
+	} else {
+		lua_pushnil(L);
+	}
 	lua_pushinteger(L, (lua_Integer)event_id);
-	lua_pushlstring(L, filename, (size_t)filename_len);
+	lua_pushstring(L, (const char *)filename);
 
 out:
 	if (filename != NULL) {
@@ -283,7 +297,9 @@ out:
 int get_stdin_by_stdout(lua_State *L)
 {
 	int stdout_inode;
+	int stdout_type;
 	int event_id;
+	char std[64];
 	int filename_len;
 	char *filename = NULL;
 	struct lua_db *db;
@@ -304,7 +320,8 @@ int get_stdin_by_stdout(lua_State *L)
 
 	// get next stdin, event_id, filename
 	err = select_stdin_by_stdout(db->db, db->sqlite_stmts, &stdout_inode,
-				     &event_id, &filename, &filename_len);
+				     &stdout_type, &event_id, &filename,
+				     &filename_len);
 	if (err == CODE_FAILED) {
 		lua_pushnil(L);
 		lua_pushnil(L);
@@ -313,10 +330,21 @@ int get_stdin_by_stdout(lua_State *L)
 		goto out;
 	}
 
-	// push stdin, event_id, filename
-	lua_pushinteger(L, (lua_Integer)stdout_inode);
+	// push stdout, event_id, filename
+	if (stdout_type == STD_SOCK) {
+		sprintf(std, "socket-%d", stdout_inode);
+		lua_pushstring(L, std);
+	} else if (stdout_type == STD_PIPE) {
+		sprintf(std, "pipe-%d", stdout_inode);
+		lua_pushstring(L, std);
+	} else if (stdout_type == STD_TTY) {
+		sprintf(std, "tty-%d", stdout_inode);
+		lua_pushstring(L, std);
+	} else {
+		lua_pushnil(L);
+	}
 	lua_pushinteger(L, (lua_Integer)event_id);
-	lua_pushlstring(L, filename, (size_t)filename_len);
+	lua_pushstring(L, (const char *)filename);
 
 out:
 	if (filename != NULL) {
