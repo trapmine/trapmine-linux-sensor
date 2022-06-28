@@ -136,8 +136,8 @@ unsigned char SELECT_STDOUT_BY_STDIN[] =
 unsigned char SELECT_STDIN_BY_STDOUT[] =
 	"SELECT P1." STDOUT_INODE ", P1." STDOUT_TYPE ", P1." EVENT_ID
 	", P2." FILENAME " from process_info P1 JOIN file_info P2 ON "
-	"P1." FILE_ID "== P2." FILE_ID " WHERE P1." process_info
-	" = :" process_info ";";
+	"P1." FILE_ID "== P2." FILE_ID " WHERE P1." STDIN_INODE
+	" = :" STDIN_INODE ";";
 
 unsigned char SELECT_TGID_BY_EVENT_ID[] =
 	"SELECT " TGID ", " PID " from events WHERE " EVENT_ID " = :" EVENT_ID
