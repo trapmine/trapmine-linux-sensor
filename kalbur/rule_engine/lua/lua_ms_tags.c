@@ -34,21 +34,20 @@ static void tag(lua_State *L, int indx, unsigned long tag)
 	tag_ms(ms, indx, tag);
 }
 
-#define TAG_HLPROCBIN ((1UL << 16) | 1)
+#define TAG_HLPROCBIN 1UL
 static int tag_HLProcBin(lua_State *L)
 {
 	tag(L, TAG_HL_INDX, TAG_HLPROCBIN);
 	return 0;
 }
 
-#define TAG_HLFILE ((1UL << 17) | 1)
+#define TAG_HLFILE 1UL << 1
 static int tag_HLFile(lua_State *L)
 {
 	tag(L, TAG_HL_INDX, TAG_HLFILE);
 	return 0;
 }
 
-#define TAG_ALERT(type) ((type << 16) | 2)
 static int tag_Alert(lua_State *L)
 {
 	int err;
@@ -62,7 +61,7 @@ static int tag_Alert(lua_State *L)
 
 	unsigned long alert = (unsigned long)lua_tointeger(L, -1);
 
-	tag(L, TAG_ALERT_INDX, TAG_ALERT(alert));
+	tag(L, TAG_ALERT_INDX, alert);
 
 	return 0;
 }
@@ -97,7 +96,7 @@ static void initialize_tag_globals(lua_State *L)
 	lua_setglobal(L, "AlertFilelessExec");
 
 	lua_pushinteger(L, ALERT_REVERSE_SHELL);
-	lua_setglobal(L, "ALertReverseShell");
+	lua_setglobal(L, "AlertReverseShell");
 
 	lua_pushinteger(L, ALERT_LPE_ATTEMPT);
 	lua_setglobal(L, "AlertLPEAttempt");
