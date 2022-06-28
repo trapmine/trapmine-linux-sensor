@@ -38,6 +38,20 @@ static bool should_process_rules(struct message_state *ms)
 	return false;
 }
 
+static bool should_process_tags(struct message_state *ms)
+{
+	if ((!IS_MS_TAGS_PROCESSED(ms)) && IS_MS_RULES_PROCESSED(ms)) {
+		ASSERT(IS_MS_COMPLETE(ms) != 0,
+		       "should_process_tags: ms->progress != completed");
+		ASSERT(IS_MS_GC(ms) == 0,
+		       "should_process_tags: ms->progress == gc");
+
+		return true;
+	}
+
+	return false;
+}
+
 void process_message(struct message_state *ms, struct engine *e)
 {
 	int err;
@@ -55,9 +69,15 @@ void process_message(struct message_state *ms, struct engine *e)
 		transition_ms_progress(ms, MS_RULES_PROCESSED, err);
 	}
 
+	if (should_process_tags(ms)) {
+		ASSERT(ms->event_id, "process_message: ms->event_id == 0");
+		err = process_tags(ms);
+		transition_ms_progress(ms, MS_TAGS_PROCESSED, err);
+	}
+
 #ifdef __DEBUG__
 	struct probe_event_header *eh = ms->primary_data;
-	if (IS_SYSCALL_HANDLED(eh->syscall_nr)) {
+	if (IS_SYSCALL_HANDLED(eh->syscall_nr) && (ms->tags[0] | ms->tags[1])) {
 		printf("alert tag: %lu\n", ms->tags[0]);
 		printf("hashlookup: %lu\n", ms->tags[1]);
 	}

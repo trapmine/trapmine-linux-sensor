@@ -188,9 +188,6 @@ int prepare_sql(sqlite3 *db, hashtable_t *hash_table)
 	sqlite3_stmt *ppStmt;
 	int err;
 
-	// initialize user defined functions
-	err = init_notifier(db, hash_table);
-
 	// Save prepared insert statements in hashmap
 	for (unsigned int i = 0; i < NUM_OF_STMTS; i++) {
 		err = sqlite3_prepare_v2(db, SQL_STMTS[i].sql,
