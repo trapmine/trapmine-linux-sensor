@@ -92,9 +92,11 @@ typedef int (*message_complete_predicate)(struct message_state *);
 #define MS_RULES_PROCESSED (1UL << 1)
 #define MS_DB_SAVED (1UL << 2)
 #define MS_GC (1UL << 3)
+#define MS_TAGS_PROCESSED (1UL << 4)
 
 #define IS_MS_COMPLETE(ms) (((ms->progress) & (MS_COMPLETE)) != 0)
 #define IS_MS_RULES_PROCESSED(ms) (((ms->progress) & (MS_RULES_PROCESSED)) != 0)
+#define IS_MS_TAGS_PROCESSED(ms) (((ms->progress) & (MS_TAGS_PROCESSED)) != 0)
 #define IS_MS_DB_SAVED(ms) (((ms->progress) & (MS_DB_SAVED)) != 0)
 #define IS_MS_GC(ms) (((ms->progress) & (MS_GC)) != 0)
 

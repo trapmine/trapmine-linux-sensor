@@ -22,7 +22,7 @@ HELPERS_FN = $(UTIL_DIR)/helpers.o
 
 RULE_ENGINE = $(DATABASE_DIR)/database.o \
 			$(DATABASE_DIR)/rules.o \
-			$(DATABASE_DIR)/notifier.o \
+			$(ENGINE_DIR)/notifier.o \
 			$(ENGINE_DIR)/engine.o \
 			$(ENGINE_DIR)/save_ms.o \
 			$(LUA_DIR)/lua_engine.o \
@@ -41,6 +41,7 @@ RULE_ENGINE = $(DATABASE_DIR)/database.o \
 			$(LUA_DIR)/lua_module_load_info.o \
 			$(LUA_DIR)/lua_modprobe_overwrite_info.o \
 			$(LUA_DIR)/lua_process_lpe_info.o \
+			$(LUA_DIR)/lua_helpers.o \
 
 HELPERS = $(HASH) $(RULE_ENGINE) $(SYMSEARCH) $(HELPERS_FN) $(SAFE)
 SQLITE3 = $(INC_DIR)/sqlite3.o
@@ -140,6 +141,6 @@ $(PROC_MONITOR).o: $(PROC_MONITOR).c $(wildcard %.h) $(PROC_MONITOR).skel.h
 # Build application binary
 $(PROC_MONITOR): $(PRELIM_TARGETS) $(SUPPORT) $(THIRD_PARTY)
 	$(call msg,CC,$@)
-	$(Q)$(CC) -static $(CFLAGS) $(INCLUDES) $(HELPERS) $(PRELIM_TARGETS) $(THIRD_PARTY) $(PROC_MONITOR_LINK_FLAGS) -o $@
+	$(Q)$(CC) -static $(CFLAGS) $(INCLUDES) $(DEBUG_FLAG) $(HELPERS) $(PRELIM_TARGETS) $(THIRD_PARTY) $(PROC_MONITOR_LINK_FLAGS) -o $@
 
 .PHONY: all clean

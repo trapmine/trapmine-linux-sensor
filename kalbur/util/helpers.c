@@ -22,7 +22,7 @@ char *get_interpreter_string(char *string_data, uint32_t offset)
 {
 	char *interp;
 
-	if(string_data == NULL)
+	if (string_data == NULL)
 		return NULL;
 
 	if (offset == LAST_NULL_BYTE(PER_CPU_STR_BUFFSIZE))
@@ -52,6 +52,10 @@ char *build_cmdline(char *args_data, uint32_t argv_off, unsigned long nbytes)
 
 	str = &(args_data[argv_off]);
 	memcpy(args, str, nbytes);
+
+	if (nbytes == 0)
+		return args;
+
 	for (unsigned int i = 0; i < (nbytes - 1); ++i) {
 		if (args[i] == 0)
 			args[i] = ',';
@@ -79,6 +83,9 @@ char *build_env(char *env_data, uint32_t env_off, unsigned long nbytes)
 	str = &(env_data[env_off]);
 	memcpy(env, str, nbytes);
 
+	if (nbytes == 0)
+		return env;
+
 	for (unsigned int i = 0; i < (nbytes - 1); ++i) {
 		if (env[i] == 0)
 			env[i] = ',';
@@ -95,6 +102,9 @@ char *build_filename_from_event(char *file_path, uint32_t pathlen)
 	char *filename;
 	char *dest;
 	size_t src_len, path_sz;
+
+	if (pathlen == 0)
+		return NULL;
 
 	parts = (char **)malloc(pathlen * sizeof(char *));
 	if (parts == NULL)

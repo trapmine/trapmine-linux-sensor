@@ -188,9 +188,6 @@ int prepare_sql(sqlite3 *db, hashtable_t *hash_table)
 	sqlite3_stmt *ppStmt;
 	int err;
 
-	// initialize user defined functions
-	err = init_notifier(db, hash_table);
-
 	// Save prepared insert statements in hashmap
 	for (unsigned int i = 0; i < NUM_OF_STMTS; i++) {
 		err = sqlite3_prepare_v2(db, SQL_STMTS[i].sql,
@@ -2003,6 +2000,154 @@ int select_all_process_lpe_info(sqlite3 *db, hashtable_t *ht,
 
 	err = err == SQLITE_DONE ? CODE_SUCCESS : CODE_FAILED;
 
+	sqlite3_clear_bindings(ppStmt);
+	sqlite3_reset(ppStmt);
+
+	return err;
+}
+
+int select_tgid_by_event_id(sqlite3 *db, hashtable_t *ht, int event_id)
+{
+	int tgid, err;
+	sqlite3_stmt *ppStmt;
+
+	ppStmt = hash_get(ht, SELECT_TGID_BY_EVENT_ID,
+			  sizeof(SELECT_TGID_BY_EVENT_ID));
+	if (ppStmt == NULL) {
+		fprintf(stderr,
+			"select_tgid_by_event_id: Failed to acquire prepared statement from hashmap.\n");
+		return CODE_FAILED;
+	}
+
+	SQLITE3_BIND_INT("select_tgid_by_event_id", int, EVENT_ID, event_id);
+
+	err = sqlite3_step(ppStmt);
+
+	if (err == SQLITE_ROW)
+		tgid = sqlite3_column_int(ppStmt, 0);
+	else
+		tgid = CODE_FAILED;
+
+	sqlite3_clear_bindings(ppStmt);
+	sqlite3_reset(ppStmt);
+
+	return tgid;
+}
+
+int select_stdout_by_stdin(sqlite3 *db, hashtable_t *ht, int *stdin_inode,
+			   int *stdin_type, int *event_id, char **filename,
+			   int *filename_size)
+{
+	int err;
+	const unsigned char *tmp_filename;
+	sqlite3_stmt *ppStmt;
+
+	ppStmt = hash_get(ht, SELECT_STDOUT_BY_STDIN,
+			  sizeof(SELECT_STDOUT_BY_STDIN));
+	if (ppStmt == NULL) {
+		fprintf(stderr,
+			"select_stdout_by_stdin: Failed to acquire prepared statement from hashmap.\n");
+		return CODE_FAILED;
+	}
+
+	SQLITE3_BIND_INT("select_stdout_by_stdin", int, STDOUT_INODE,
+			 *stdin_inode);
+
+	err = sqlite3_step(ppStmt);
+	if (err != SQLITE_ROW) {
+		err = CODE_FAILED;
+		goto out;
+	}
+
+	SQLITE3_GET(*stdin_inode, int, 0);
+	SQLITE3_GET(*stdin_type, int, 1);
+	SQLITE3_GET(*event_id, int, 2);
+	SQLITE3_GET(tmp_filename, text, 3);
+	if (tmp_filename == NULL) {
+		tmp_filename = (const unsigned char *)"";
+	}
+	*filename_size = (int)strlen((const char *)tmp_filename) + 1;
+	*filename = (char *)malloc(sizeof(char) * (size_t)*filename_size);
+	strlcpy(*filename, (const char *)tmp_filename, (size_t)*filename_size);
+
+	err = CODE_SUCCESS;
+
+out:
+	sqlite3_clear_bindings(ppStmt);
+	sqlite3_reset(ppStmt);
+
+	return err;
+}
+
+int select_stdin_by_stdout(sqlite3 *db, hashtable_t *ht, int *stdout_inode,
+			   int *stdout_type, int *event_id, char **filename,
+			   int *filename_size)
+{
+	int err;
+	const unsigned char *tmp_filename;
+	sqlite3_stmt *ppStmt;
+
+	ppStmt = hash_get(ht, SELECT_STDIN_BY_STDOUT,
+			  sizeof(SELECT_STDIN_BY_STDOUT));
+	if (ppStmt == NULL) {
+		fprintf(stderr,
+			"select_stdin_by_stdout: Failed to acquire prepared statement from hashmap.\n");
+		return CODE_FAILED;
+	}
+
+	SQLITE3_BIND_INT("select_stdin_by_stdout", int, STDIN_INODE,
+			 *stdout_inode);
+
+	err = sqlite3_step(ppStmt);
+	if (err != SQLITE_ROW) {
+		err = CODE_FAILED;
+		goto out;
+	}
+
+	SQLITE3_GET(*stdout_inode, int, 0);
+	SQLITE3_GET(*stdout_type, int, 1);
+	SQLITE3_GET(*event_id, int, 2);
+	SQLITE3_GET(tmp_filename, text, 3);
+	if (tmp_filename == NULL) {
+		tmp_filename = (const unsigned char *)"";
+	}
+	*filename_size = (int)strlen((const char *)tmp_filename) + 1;
+	*filename = (char *)malloc(sizeof(char) * (size_t)*filename_size);
+	strlcpy(*filename, (const char *)tmp_filename, (size_t)*filename_size);
+
+	err = CODE_SUCCESS;
+
+out:
+	sqlite3_clear_bindings(ppStmt);
+	sqlite3_reset(ppStmt);
+
+	return err;
+}
+
+int select_comm_in_diasllowed(sqlite3 *db, hashtable_t *ht, const char *comm)
+{
+	int err;
+	sqlite3_stmt *ppStmt;
+
+	ppStmt = hash_get(ht, SELECT_COMM, sizeof(SELECT_COMM));
+	if (ppStmt == NULL) {
+		fprintf(stderr,
+			"select_comm_in_diasllowed: Failed to acquire prepared statement from hashmap.\n");
+		return CODE_FAILED;
+	}
+
+	SQLITE3_BIND_STR("insert_file_info", text, COMM, comm);
+
+	err = sqlite3_step(ppStmt);
+	if (err != SQLITE_ROW) {
+		// if there is no row in result, we return false
+		err = 0;
+		goto out;
+	}
+
+	// if there is row in result, comm matches some row in disallowed table, we return trues
+	err = 1;
+out:
 	sqlite3_clear_bindings(ppStmt);
 	sqlite3_reset(ppStmt);
 

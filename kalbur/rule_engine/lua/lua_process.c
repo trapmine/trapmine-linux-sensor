@@ -1,29 +1,6 @@
 #include "lua_process.h"
 
 /**
- * @brief Get the global lua db object
- * Stack: [-0, +0]
- * 
- * @param L The lua state.
- *
- * @return A pointer to the lua_db object
- */
-struct lua_db *get_lua_db(lua_State *L)
-{
-	struct lua_db *db;
-
-	lua_pushstring(L, GLOBAL_LUA_DB);
-	lua_gettable(L, LUA_REGISTRYINDEX);
-	ASSERT(lua_isuserdata(L, -1), "get_lua_db: global db conn not found");
-
-	db = (struct lua_db *)lua_touserdata(L, -1);
-	ASSERT(db != NULL, "get_lua_db: global db conn not found");
-	lua_pop(L, 1);
-
-	return db;
-}
-
-/**
  * @brief Get the global pid list object.
  * Stack: [-0, +1]
  * 
@@ -241,38 +218,202 @@ fail:
 }
 
 /**
- * @brief Initializes the process context by setting up lua_db, global
+ * @brief get_stdout_by_stdin. returns next stdin, event_id, filename
+ * Stack: [-1, +3]
+ * 
+ * @param L 
+ * @param event_id
+ * @return number of return values (1)
+ */
+int get_stdout_by_stdin(lua_State *L)
+{
+	int stdin_inode;
+	int stdin_type;
+	int event_id;
+	char std[64];
+	int filename_len;
+	char *filename = NULL;
+	struct lua_db *db;
+	int err;
+
+	// git stdin inode argument
+	stdin_inode = (int)luaL_checkinteger(L, -1);
+	if (stdin_inode == 0) {
+		fprintf(stderr,
+			"get_stdout_by_stdin: invalid arg to get_stdout_by_stdin");
+		lua_pushnil(L);
+	}
+	lua_pop(L, 1);
+	// stack is reset
+
+	db = get_lua_db(L);
+	ASSERT(db != NULL, "get_stdout_by_stdin: db not found");
+
+	// get next stdin, event_id, filename
+	err = select_stdout_by_stdin(db->db, db->sqlite_stmts, &stdin_inode,
+				     &stdin_type, &event_id, &filename,
+				     &filename_len);
+	if (err == CODE_FAILED) {
+		lua_pushnil(L);
+		lua_pushnil(L);
+		lua_pushnil(L);
+
+		goto out;
+	}
+
+	// push stdin, event_id, filename
+	if (stdin_type == STD_SOCK) {
+		sprintf(std, "socket-%d", stdin_inode);
+		lua_pushstring(L, std);
+	} else if (stdin_type == STD_PIPE) {
+		sprintf(std, "pipe-%d", stdin_inode);
+		lua_pushstring(L, std);
+	} else if (stdin_type == STD_TTY) {
+		sprintf(std, "tty-%d", stdin_inode);
+		lua_pushstring(L, std);
+	} else {
+		lua_pushnil(L);
+	}
+	lua_pushinteger(L, (lua_Integer)event_id);
+	lua_pushstring(L, (const char *)filename);
+
+out:
+	if (filename != NULL) {
+		free(filename);
+		filename = NULL;
+	}
+
+	return 3;
+}
+
+/**
+ * @brief get_stdin_by_stdout. returns next stdout, event_id, filename
+ * Stack: [-1, +3]
+ * 
+ * @param L 
+ * @param event_id
+ * @return number of return values (1)
+ */
+int get_stdin_by_stdout(lua_State *L)
+{
+	int stdout_inode;
+	int stdout_type;
+	int event_id;
+	char std[64];
+	int filename_len;
+	char *filename = NULL;
+	struct lua_db *db;
+	int err;
+
+	// git stdout inode argument
+	stdout_inode = (int)luaL_checkinteger(L, -1);
+	if (stdout_inode == 0) {
+		fprintf(stderr,
+			"get_stdin_by_stdout: invalid arg to get_stdin_by_stdout");
+		lua_pushnil(L);
+	}
+	lua_pop(L, 1);
+	// stack is reset
+
+	db = get_lua_db(L);
+	ASSERT(db != NULL, "get_stdin_by_stdout: db not found");
+
+	// get next stdin, event_id, filename
+	err = select_stdin_by_stdout(db->db, db->sqlite_stmts, &stdout_inode,
+				     &stdout_type, &event_id, &filename,
+				     &filename_len);
+	if (err == CODE_FAILED) {
+		lua_pushnil(L);
+		lua_pushnil(L);
+		lua_pushnil(L);
+
+		goto out;
+	}
+
+	// push stdout, event_id, filename
+	if (stdout_type == STD_SOCK) {
+		sprintf(std, "socket-%d", stdout_inode);
+		lua_pushstring(L, std);
+	} else if (stdout_type == STD_PIPE) {
+		sprintf(std, "pipe-%d", stdout_inode);
+		lua_pushstring(L, std);
+	} else if (stdout_type == STD_TTY) {
+		sprintf(std, "tty-%d", stdout_inode);
+		lua_pushstring(L, std);
+	} else {
+		lua_pushnil(L);
+	}
+	lua_pushinteger(L, (lua_Integer)event_id);
+	lua_pushstring(L, (const char *)filename);
+
+out:
+	if (filename != NULL) {
+		free(filename);
+		filename = NULL;
+	}
+
+	return 3;
+}
+
+/**
+ * @brief Get pid of the process associated with the given event id
+ * Stack: [-1, +1]
+ * 
+ * @param L 
+ * @param event_id
+ * @return number of return values (1)
+ */
+int get_pid_by_event_id(lua_State *L)
+{
+	int pid;
+	int event_id;
+	struct lua_db *db;
+
+	// git event id argument
+	event_id = (int)luaL_checkinteger(L, -1);
+	if (event_id == 0) {
+		fprintf(stderr,
+			"get_process_by_pid: invalid arg to get_pid_by_event_id");
+		lua_pushnil(L);
+	}
+	lua_pop(L, 1);
+	// stack is reset
+
+	db = get_lua_db(L);
+	ASSERT(db != NULL, "get_pid_by_event_id: db not found");
+
+	pid = select_tgid_by_event_id(db->db, db->sqlite_stmts, event_id);
+	if (pid == CODE_FAILED) {
+		lua_pushnil(L);
+		return 1;
+	}
+
+	lua_pushinteger(L, (lua_Integer)pid);
+	return 1;
+}
+
+/**
+ * @brief Initializes the process context by setting global
  * functions, and the global pid list.
  * 
  * @param L 
  */
-void init_process_context(lua_State *L, sqlite3 *db, hashtable_t *sqlite_stmts)
+void init_process_context(lua_State *L)
 {
-	struct lua_db *lua_db;
-
 	ASSERT(L != NULL, "init_process_context: L == NULL");
-	ASSERT(db != NULL, "init_process_context: db == NULL");
-	ASSERT(sqlite_stmts != NULL,
-	       "init_process_context: sqlite_stmts == NULL");
-
-	// initialize lua_db globally and put it in registry.
-	lua_pushstring(L, GLOBAL_LUA_DB);
-	lua_db = (struct lua_db *)lua_newuserdata(L, sizeof(struct lua_db));
-	if (lua_db == NULL) {
-		fprintf(stderr,
-			"init_process_context: could not initialize lua_db");
-		lua_pop(L, 1);
-		return;
-	}
-
-	lua_db->db = db;
-	lua_db->sqlite_stmts = sqlite_stmts;
-
-	lua_settable(L, LUA_REGISTRYINDEX);
 
 	// expose global get_process_by_pid function
 	lua_pushcfunction(L, get_process_by_pid);
 	lua_setglobal(L, "get_process_by_pid");
+
+	lua_pushcfunction(L, get_stdin_by_stdout);
+	lua_setglobal(L, "get_stdin_by_stdout");
+
+	lua_pushcfunction(L, get_stdout_by_stdin);
+	lua_setglobal(L, "get_stdout_by_stdin");
+
+	lua_pushcfunction(L, get_pid_by_event_id);
+	lua_setglobal(L, "get_pid_by_event_id");
 
 	// expose global pid list to keep reference of all process contexts
 	lua_pushstring(L, GLOBAL_PID_LIST);
@@ -321,7 +462,8 @@ void teardown_process_context(lua_State *L)
 			process_context->module_load_info_arr);
 		delete_lua_modprobe_overwrite_info_array(
 			process_context->modprobe_overwrite_info_arr);
-		delete_lua_process_lpe_info_array(process_context->process_lpe_info_arr);
+		delete_lua_process_lpe_info_array(
+			process_context->process_lpe_info_arr);
 
 		lua_pop(L, 1);
 	}

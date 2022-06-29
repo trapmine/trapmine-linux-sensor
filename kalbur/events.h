@@ -45,7 +45,7 @@ typedef uint8_t u8_t;
 #define TYPED_MACRO(value, type) CALL(TYPED, value, type)
 
 //#define PER_CPU_STR_BUFFSIZE TYPED_MACRO((1 << 10), UL)
-#define PER_CPU_STR_BUFFSIZE (1 << 12)
+#define PER_CPU_STR_BUFFSIZE (1 << 13)
 #define LAST_NULL_BYTE(buffsize) ((buffsize)-1)
 
 #define PRESERVE_32_MSB(quad_word) ((quad_word >> 32) << 32)
@@ -124,7 +124,7 @@ struct mprotect_info {
 	size_t len;
 };
 
-enum STD_TYPE { STD_NONE, STD_SOCK, STD_PIPE };
+enum STD_TYPE { STD_NONE, STD_SOCK, STD_PIPE, STD_TTY };
 
 #define STDIN_INDX 0
 #define STDOUT_INDX 1
@@ -235,5 +235,6 @@ typedef union {
 #define TCP_PROT 2
 #define INET_OPS 3
 #define PIPE_FOPS 4
+#define TTY_FOPS 5
 
 #endif

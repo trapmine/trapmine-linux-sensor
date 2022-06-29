@@ -20,6 +20,7 @@ TCP_CONNECTION_INFO := lua_tcp_connection_info
 MODULE_LOAD_INFO := lua_module_load_info
 MODPROBE_OVERWRITE_INFO := lua_modprobe_overwrite_info
 PROCESS_LPE_INFO := lua_process_lpe_info
+HELPERS := lua_helpers
 
 all: $(ENGINE).o \
 	$(EVENT).o \
@@ -37,6 +38,7 @@ all: $(ENGINE).o \
 	$(MODULE_LOAD_INFO).o \
 	$(MODPROBE_OVERWRITE_INFO).o \
 	$(PROCESS_LPE_INFO).o \
+	$(HELPERS).o \
 
 $(ENGINE).o: $(ENGINE).c $(ENGINE).h
 	$(call msg,LUA_ENGINE,$@)
@@ -101,6 +103,10 @@ $(MODPROBE_OVERWRITE_INFO).o: $(MODPROBE_OVERWRITE_INFO).c $(MODPROBE_OVERWRITE_
 $(PROCESS_LPE_INFO).o: $(PROCESS_LPE_INFO).c $(PROCESS_LPE_INFO).h
 	$(call msg,LUA_PROCESS_LPE_INFO,$@)
 	$(Q)$(CC) -DAPPLY_ASSERT $(DEBUG_FLAG) $(CFLAGS) $(INCLUDES) -c $(PROCESS_LPE_INFO).c -o $@
+
+$(HELPERS).o: $(HELPERS).c $(HELPERS).h
+	$(call msg,LUA_HELPERS,$@)
+	$(Q)$(CC) -DAPPLY_ASSERT $(DEBUG_FLAG) $(CFLAGS) $(INCLUDES) -c $(HELPERS).c -o $@
 
 clean:
 	$(call msg,CLEAN)

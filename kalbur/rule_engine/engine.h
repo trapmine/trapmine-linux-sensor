@@ -10,6 +10,7 @@
 #include <hash.h>
 #include <sqlite3.h>
 #include <lua_engine.h>
+#include <notifier.h>
 
 struct engine {
 	struct lua_engine *le;

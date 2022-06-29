@@ -16,6 +16,18 @@
 
 #define IS_ATTR(attr_name, attr) strncmp(attr_name, attr, sizeof(attr)) == 0
 
+#define EVENT_ID "eventId"
+static int push_event_id(lua_State *L, const char *attr_name,
+			 struct message_state *event_obj)
+{
+	if (IS_ATTR(attr_name, EVENT_ID)) {
+		lua_pushinteger(L, (lua_Integer)event_obj->event_id);
+		return CODE_SUCCESS;
+	}
+
+	return CODE_FAILED;
+}
+
 #define PID "pid"
 #define EVENT_TIME "eventTime"
 #define COMM "processName"
@@ -43,6 +55,7 @@ static int push_event_header_attr(lua_State *L, const char *attr_name,
 #define PPID "ppid"
 #define CLONE_FLAGS "cloneFlags"
 #define FILENAME "filename"
+#define FILEMAGIC "fileMagic"
 #define CMDLINE "cmdline"
 #define ENV "env"
 #define INTERP "interpreter"
@@ -61,6 +74,10 @@ ATTRIBUTE_HANDLER(push_proc_launch_attr)
 
 	ASSERT(IS_PROCESS_LAUNCH(pinfo->eh.syscall_nr),
 	       "push_proc_launch_attr: not process launch event");
+
+	err = push_event_id(L, attr_name, event_obj);
+	if (err == CODE_SUCCESS)
+		return;
 
 	err = push_event_header_attr(L, attr_name, &pinfo->eh);
 	if (err == CODE_SUCCESS)
@@ -83,6 +100,8 @@ ATTRIBUTE_HANDLER(push_proc_launch_attr)
 		} else {
 			lua_pushnil(L);
 		}
+	} else if (IS_ATTR(attr_name, FILEMAGIC)) {
+		lua_pushnumber(L, (lua_Number)pinfo->file.s_magic);
 	} else if (IS_ATTR(attr_name, CMDLINE)) {
 		if (string_data == NULL)
 			return;
@@ -108,17 +127,23 @@ ATTRIBUTE_HANDLER(push_proc_launch_attr)
 			lua_pushnil(L);
 		}
 	} else if (IS_ATTR(attr_name, INTERP)) {
-		interp = get_interpreter_string(string_data, pinfo->interp_str_offset);
+		interp = get_interpreter_string(string_data,
+						pinfo->interp_str_offset);
 		if (interp != NULL) {
 			lua_pushstring(L, interp);
-		}
-		else {
+		} else {
 			lua_pushnil(L);
 		}
 	} else if (IS_ATTR(attr_name, STDIN)) {
 		io = pinfo->io[STDIN_INDX];
 		if (io.type == STD_SOCK) {
 			sprintf(std, "socket-%lu", io.std_ino);
+			lua_pushstring(L, std);
+		} else if (io.type == STD_PIPE) {
+			sprintf(std, "pipe-%lu", io.std_ino);
+			lua_pushstring(L, std);
+		} else if (io.type == STD_TTY) {
+			sprintf(std, "tty-%lu", io.std_ino);
 			lua_pushstring(L, std);
 		} else {
 			lua_pushnil(L);
@@ -127,7 +152,12 @@ ATTRIBUTE_HANDLER(push_proc_launch_attr)
 		io = pinfo->io[STDOUT_INDX];
 		if (io.type == STD_SOCK) {
 			sprintf(std, "socket-%lu", io.std_ino);
-			printf("Inside attr handler: %s\n", std);
+			lua_pushstring(L, std);
+		} else if (io.type == STD_PIPE) {
+			sprintf(std, "pipe-%lu", io.std_ino);
+			lua_pushstring(L, std);
+		} else if (io.type == STD_TTY) {
+			sprintf(std, "tty-%lu", io.std_ino);
 			lua_pushstring(L, std);
 		} else {
 			lua_pushnil(L);
@@ -136,6 +166,12 @@ ATTRIBUTE_HANDLER(push_proc_launch_attr)
 		io = pinfo->io[STDERR_INDX];
 		if (io.type == STD_SOCK) {
 			sprintf(std, "socket-%lu", io.std_ino);
+			lua_pushstring(L, std);
+		} else if (io.type == STD_TTY) {
+			sprintf(std, "tty-%lu", io.std_ino);
+			lua_pushstring(L, std);
+		} else if (io.type == STD_PIPE) {
+			sprintf(std, "pipe-%lu", io.std_ino);
 			lua_pushstring(L, std);
 		} else {
 			lua_pushnil(L);
@@ -152,6 +188,10 @@ ATTRIBUTE_HANDLER(push_exit_attr)
 
 	ASSERT(IS_EXIT_EVENT(e->eh.syscall_nr),
 	       "push_exit_attr: incorrect function called. event not exit");
+
+	err = push_event_id(L, attr_name, event_obj);
+	if (err == CODE_SUCCESS)
+		return;
 
 	err = push_event_header_attr(L, attr_name, &e->eh);
 	if (err != CODE_SUCCESS) {
@@ -172,6 +212,10 @@ ATTRIBUTE_HANDLER(push_socket_create_attr)
 
 	ASSERT(sinfo->eh.syscall_nr == SYS_SOCKET,
 	       "push_socket_create_attr: not socket create event");
+
+	err = push_event_id(L, attr_name, event_obj);
+	if (err == CODE_SUCCESS)
+		return;
 
 	err = push_event_header_attr(L, attr_name, &sinfo->eh);
 	if (err == CODE_SUCCESS)
@@ -214,6 +258,10 @@ ATTRIBUTE_HANDLER(push_tcp_attr)
 	syscall = t->t4.eh.syscall_nr;
 	ASSERT((syscall == SYS_ACCEPT) || (syscall == SYS_CONNECT),
 	       "push_tcp_attr: not tcp event");
+
+	err = push_event_id(L, attr_name, event_obj);
+	if (err == CODE_SUCCESS)
+		return;
 
 	err = push_event_header_attr(L, attr_name, &t->t4.eh);
 	if (err == CODE_SUCCESS)
@@ -278,6 +326,10 @@ ATTRIBUTE_HANDLER(push_ptrace_attr)
 	ASSERT(ptrace->eh.syscall_nr == SYS_PTRACE,
 	       "push_ptrace_attr: not ptrace event");
 
+	err = push_event_id(L, attr_name, event_obj);
+	if (err == CODE_SUCCESS)
+		return;
+
 	err = push_event_header_attr(L, attr_name, &ptrace->eh);
 	if (err == CODE_SUCCESS)
 		return;
@@ -304,6 +356,10 @@ ATTRIBUTE_HANDLER(push_kmodule_attr)
 
 	ASSERT(kmod_info->eh.syscall_nr == SYS_FINIT_MODULE,
 	       "push_kmodule_attr: not a kernel module load event");
+
+	err = push_event_id(L, attr_name, event_obj);
+	if (err == CODE_SUCCESS)
+		return;
 
 	err = push_event_header_attr(L, attr_name, &kmod_info->eh);
 	if (err == CODE_SUCCESS)
@@ -334,6 +390,10 @@ static void push_default(lua_State *L, const char *attr_name,
 	struct probe_event_header *eh =
 		(struct probe_event_header *)event_obj->primary_data;
 
+	err = push_event_id(L, attr_name, event_obj);
+	if (err == CODE_SUCCESS)
+		return;
+
 	err = push_event_header_attr(L, attr_name, eh);
 	if (err != CODE_SUCCESS)
 		lua_pushnil(L);
@@ -361,4 +421,3 @@ push_attr_fn get_push_attr_fn(int syscall)
 
 	return NULL;
 }
-

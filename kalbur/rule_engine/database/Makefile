@@ -4,16 +4,11 @@ include $(ROOT_DIR)/Makefile.inc
 
 DATABASE := database
 RULES := rules
-NOTIFIER := notifier
 HEADER_DEPENDENCIES := stmts.h schema.h helper_defs.h
 
-all: $(DATABASE).o $(RULES).o $(NOTIFIER).o
+all: $(DATABASE).o $(RULES).o
 
 INC := $(INCLUDES)
-
-$(NOTIFIER).o: $(NOTIFIER).c $(NOTIFIER).h
-	$(call msg,CC,$@)
-	$(Q)$(CC) -DAPPLY_ASSERT $(CFLAGS) $(INCLUDES) -c $(NOTIFIER).c -o $@
 
 $(RULES).o: $(RULES).c $(RULES).h
 	$(call msg,CC,$@)

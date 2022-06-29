@@ -1627,6 +1627,19 @@ out:
 	return err;
 }
 
+__attribute__((always_inline)) static u64 get_tty_inode(struct file *f)
+{
+	int err;
+	u64 i_ino;
+
+	err = BPF_CORE_READ_INTO(&i_ino, f, f_inode, i_ino);
+	JUMP_TARGET(out);
+
+	return i_ino;
+out:
+	return 0;
+}
+
 /* Pipe inodes are place in f.f_path.dentry->inode->i_ino;
  * see create_pipe_files() -> alloc_file_pseudo() */
 __attribute__((always_inline)) static u64 get_pipe_inode(struct file *f)
@@ -1699,6 +1712,9 @@ get_standard_pipes_inodes(struct process_info *pinfo)
 		} else if (err == PIPE_FOPS) {
 			pinfo->io[i].std_ino = get_pipe_inode(std[i]);
 			pinfo->io[i].type = STD_PIPE;
+		} else if (err == TTY_FOPS) {
+			pinfo->io[i].std_ino = get_tty_inode(std[i]);
+			pinfo->io[i].type = STD_TTY;
 		}
 	}
 

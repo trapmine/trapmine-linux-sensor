@@ -20,19 +20,14 @@
 #include "lua_module_load_info.h"
 #include "lua_modprobe_overwrite_info.h"
 #include "lua_process_lpe_info.h"
+#include "lua_helpers.h"
 
-#define GLOBAL_LUA_DB "SENSOR_DB"
 #define GLOBAL_PID_LIST "SENSOR_PID_LIST"
 #define PROCESS_METATABLE "ProcessMetaTable"
 
 #define IS_ATTR(attr_name, attr) strncmp(attr_name, attr, sizeof(attr)) == 0
 
 // TODO: check which process is live with the event_time and exit event.
-
-struct lua_db {
-	sqlite3 *db;
-	hashtable_t *sqlite_stmts;
-};
 
 #define PID "pid"
 struct lua_process_context {
@@ -47,14 +42,16 @@ struct lua_process_context {
 	struct lua_process_lpe_info_array *process_lpe_info_arr;
 };
 
-struct lua_db *get_lua_db(lua_State *L);
 void get_global_pid_list(lua_State *L);
 void get_global_pid(lua_State *L, int pid);
 
 int process_index(lua_State *L);
 int get_process_by_pid(lua_State *L);
+int get_pid_by_event_id(lua_State *L);
+int get_stdout_by_stdin(lua_State *L);
+int get_stdin_by_stdout(lua_State *L);
 
 void teardown_process_context(lua_State *L);
-void init_process_context(lua_State *L, sqlite3 *db, hashtable_t *sqlite_stmts);
+void init_process_context(lua_State *L);
 
 #endif // LUA_PROCESS_H
