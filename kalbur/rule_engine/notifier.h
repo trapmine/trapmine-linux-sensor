@@ -28,6 +28,7 @@ struct action_struct {
 };
 
 int generate_alert(uint64_t event_id, uint64_t alert_type);
+int kill_process(uint64_t event_id);
 int process_tags(struct message_state *ms);
 
 #endif // NOTIFIER_H
