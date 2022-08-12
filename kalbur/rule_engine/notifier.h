@@ -20,15 +20,12 @@ struct hashlookup_data {
 
 struct action_struct {
 	uint64_t event_id;
-	uint64_t action_type;
-	union action_data {
-		struct alert_data alert;
-		struct hashlookup_data hashlookup;
-	} data;
+	uint64_t action_tags;
+	struct alert_data alert;
+	struct hashlookup_data hashlookup;
 };
 
-int generate_alert(uint64_t event_id, uint64_t alert_type);
-int kill_process(uint64_t event_id);
 int process_tags(struct message_state *ms);
+int send_action_message(struct action_struct *action);
 
 #endif // NOTIFIER_H

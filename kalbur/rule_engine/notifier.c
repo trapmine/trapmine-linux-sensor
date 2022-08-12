@@ -4,21 +4,24 @@
 
 int process_tags(struct message_state *ms)
 {
+	struct action_struct action = { 0 };
 	int err = CODE_SUCCESS;
+	bool send_message = false;
+	action.event_id = (uint64_t)ms->event_id;
 
 	if (ms->tags[TAG_ALERT_INDX]) {
-		err = generate_alert((uint64_t)ms->event_id,
-				     ms->tags[TAG_ALERT_INDX]);
-		if (err != CODE_SUCCESS) {
-			return err;
-		}
+		action.action_tags |= 1UL << TAG_ALERT_INDX;
+		action.alert.alert_type = ms->tags[TAG_ALERT_INDX];
+		send_message = true;
 	}
+
 	if (ms->tags[TAG_KILL_PROCESS_INDX]) {
-		printf("process_tags: killing process %d", ms->event_id);
-		err = kill_process((uint64_t)ms->event_id);
-		if (err != CODE_SUCCESS) {
-			return err;
-		}
+		action.action_tags |= 1UL << TAG_KILL_PROCESS_INDX;
+		send_message = true;
+	}
+
+	if (send_message) {
+		err = send_action_message(&action);
 	}
 
 	return err;
@@ -61,9 +64,8 @@ ret:
 	return err;
 }
 
-int kill_process(uint64_t event_id)
+int send_action_message(struct action_struct *action)
 {
-	struct action_struct action = { 0 };
 	int sfd;
 	int err;
 
@@ -72,49 +74,12 @@ int kill_process(uint64_t event_id)
 	if (err == CODE_FAILED) {
 		goto ret;
 	}
-
-	// populate action struct.
-	action.event_id = event_id;
-	action.action_type = KILL_PROCESS_ACTION;
 
 	// write to socket.
-	if (write(sfd, &action, sizeof(struct action_struct)) !=
+	if (write(sfd, action, sizeof(struct action_struct)) !=
 	    sizeof(struct action_struct)) {
 		fprintf(stderr,
-			"kill_process: write failed or partial write to unix domain "
-			"socket %s\n",
-			ACTION_SOCK_PATH);
-		err = CODE_FAILED;
-		goto out;
-	}
-
-	err = CODE_SUCCESS;
-out:
-	close(sfd);
-ret:
-	return err;
-}
-
-int generate_alert(uint64_t event_id, uint64_t alert_type)
-{
-	struct action_struct action = { 0 };
-	int sfd;
-	int err;
-
-	// create and connect to socket
-	err = init_socket(ACTION_SOCK_PATH, &sfd);
-	if (err == CODE_FAILED) {
-		goto ret;
-	}
-
-	action.event_id = event_id;
-	action.action_type = ALERT_ACTION;
-	action.data.alert.alert_type = alert_type;
-
-	if (write(sfd, &action, sizeof(struct action_struct)) !=
-	    sizeof(struct action_struct)) {
-		fprintf(stderr,
-			"generate_alert: write failed or partial write to unix domain "
+			"send_action_message: write failed or partial write to unix domain "
 			"socket %s\n",
 			ACTION_SOCK_PATH);
 		err = CODE_FAILED;
