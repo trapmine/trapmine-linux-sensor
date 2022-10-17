@@ -48,6 +48,13 @@ static int tag_HLFile(lua_State *L)
 	return 0;
 }
 
+#define TAG_KILL_PROCESS 1UL
+static int tag_kill_process(lua_State *L)
+{
+	tag(L, TAG_KILL_PROCESS_INDX, TAG_KILL_PROCESS);
+	return 0;
+}
+
 static int tag_Alert(lua_State *L)
 {
 	int err;
@@ -78,6 +85,9 @@ static void initialize_tag_funcs(lua_State *L)
 
 	lua_pushcfunction(L, tag_Alert);
 	lua_setglobal(L, "TagAlert");
+
+	lua_pushcfunction(L, tag_kill_process);
+	lua_setglobal(L, "TagKillProcess");
 }
 
 #define ALERT_FILELESS_EXEC 1UL

@@ -102,7 +102,8 @@ typedef int (*message_complete_predicate)(struct message_state *);
 
 #define TAG_ALERT_INDX 0
 #define TAG_HL_INDX 1
-#define TOTAL_TAGS 2
+#define TAG_KILL_PROCESS_INDX 2
+#define TOTAL_TAGS 3
 
 struct message_state {
 	pthread_mutex_t message_state_lock;
