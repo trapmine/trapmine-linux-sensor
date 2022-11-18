@@ -34,7 +34,7 @@ int insert_event(sqlite3 *db, hashtable_t *ht, struct probe_event_header *eh);
 int insert_file_info(sqlite3 *db, hashtable_t *ht, char *string_data,
 		     struct file_info *f);
 int insert_proc_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
-		     int event_id, int file_id);
+		     int event_id, u64_t tgid_pid, int file_id);
 int insert_mmap_info(sqlite3 *db, hashtable_t *ht, struct proc_mmap *pm,
 		     int event_id, int file_id);
 int insert_socket_create_info(sqlite3 *db, hashtable_t *ht,

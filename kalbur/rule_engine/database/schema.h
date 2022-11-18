@@ -105,6 +105,10 @@
 	" UINT64_T,						\
 		" PARENT_PID                                                   \
 	" UINT64_T,						\
+		" TGID                                                  \
+	" UINT64_T,						\
+		" PID                                                   \
+	" UINT64_T,						\
 		" CLONE_FLAGS                                                  \
 	" UINT64_T, 					\
 		" FILE_ID                                                      \

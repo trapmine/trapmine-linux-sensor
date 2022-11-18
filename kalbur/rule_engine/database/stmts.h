@@ -67,14 +67,14 @@ unsigned char INSERT_PROC_MMAP[] = "INSERT INTO proc_mmap(\
 unsigned char INSERT_PROCESS_INFO[] =
 	"INSERT INTO process_info(\
 					" EVENT_ID "," PARENT_TGID
-	"," PARENT_PID "," CLONE_FLAGS "," FILE_ID "," ARGS "," ENV
-	"," INTERPRETER "," UID "," GID "," EUID "," EGID "," STDIN_INODE
+	"," PARENT_PID "," TGID "," PID "," CLONE_FLAGS "," FILE_ID "," ARGS
+	"," ENV "," INTERPRETER "," UID "," GID "," EUID "," EGID "," STDIN_INODE
 	"," STDIN_TYPE "," STDOUT_INODE "," STDOUT_TYPE "," STDERR_INODE
 	"," STDERR_TYPE ") VALUES(:" EVENT_ID ",:" PARENT_TGID ",:" PARENT_PID
-	",:" CLONE_FLAGS ",:" FILE_ID ",:" ARGS ",:" ENV ",:" INTERPRETER
-	",:" UID ",:" GID ",:" EUID ",:" EGID ",:" STDIN_INODE ",:" STDIN_TYPE
-	",:" STDOUT_INODE ",:" STDOUT_TYPE ",:" STDERR_INODE ",:" STDERR_TYPE
-	");";
+	",:" TGID ",:" PID ",:" CLONE_FLAGS ",:" FILE_ID ",:" ARGS ",:" ENV
+	",:" INTERPRETER ",:" UID ",:" GID ",:" EUID ",:" EGID ",:" STDIN_INODE
+	",:" STDIN_TYPE ",:" STDOUT_INODE ",:" STDOUT_TYPE ",:" STDERR_INODE
+	",:" STDERR_TYPE ");";
 
 unsigned char INSERT_SOCKET_CREATE_INFO[] =
 	"INSERT INTO socket_create_info(\
