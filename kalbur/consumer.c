@@ -15,6 +15,8 @@
 #include <engine.h>
 #include <database.h>
 #include <hash.h>
+#include <lua_engine.h>
+#include <stdlib.h>
 
 #define ASSIGN_WITH_SOFTWARE_BARRIER(lval, rval)                               \
 	do {                                                                   \
@@ -27,50 +29,64 @@ static int create_db_conn(char *dbname, sqlite3 **database)
 	return create_connection(dbname, database, 0);
 }
 
-static int prepare_thread_run(hashtable_t **ht, sqlite3 **database,
-			      pthread_t thread_id)
+static int prepare_thread_run(struct engine **e, pthread_t thread_id)
 {
 	int err;
+	hashtable_t *ht;
+	sqlite3 *database;
 
-	*ht = init_hashtable();
-	if (!(*ht)) {
+	ht = init_hashtable();
+	if (ht == NULL) {
 		fprintf(stderr,
 			"prepare_thread_run: failed to allocate space for hash_table\n");
 		goto error;
 	}
 
-	err = create_db_conn(DB_NAME, database);
+	err = create_db_conn(DB_NAME, &database);
 	if (err == CODE_FAILED) {
 		fprintf(stderr,
 			"prepare_thread_run: failed to create database connection in consumer\n");
 
-		delete_table(*ht);
+		delete_table(ht);
 		goto error;
 	}
 
-	err = prepare_sql(*database, *ht);
+	err = prepare_sql(database, ht);
 	if (err == CODE_FAILED) {
 		fprintf(stderr,
 			"prepare_thread_run: failed to prepare sql statements in consumer\n");
 
-		delete_table(*ht);
-		sqlite3_close(*database);
+		delete_table(ht);
+		sqlite3_close(database);
 		goto error;
 	}
-	printf("[%lu] Sql prepared\n", thread_id);
+
+	*e = (struct engine *)calloc(1UL, sizeof(struct engine));
+	if (*e == NULL) {
+		fprintf(stderr,
+			"prepare_thread_run: failed to allocate memory for engine\n");
+		delete_table(ht);
+		sqlite3_close(database);
+		goto error;
+	}
+	(*e)->db = database;
+	(*e)->sqlite_stmts = ht;
+
+	printf("[%lu] Engine prepared\n", thread_id);
 
 	return CODE_SUCCESS;
 
 error:
-	*ht = NULL;
-	*database = NULL;
+	if (*e != NULL) {
+		free(*e);
+		*e = NULL;
+	}
 	return CODE_FAILED;
 }
 
-static void invoke_engine(struct message_state *ms, sqlite3 *db,
-			  hashtable_t *ht)
+static void invoke_engine(struct message_state *ms, struct engine *e)
 {
-	process_message(ms, db, ht);
+	process_message(ms, e);
 }
 
 static int consume_ms(struct message_state *ms)
@@ -84,19 +100,22 @@ void *consumer(void *arg)
 	struct message_state *ms;
 	struct thread_msg *info;
 	struct msg_list *head;
-	hashtable_t *hash_table = NULL;
-	sqlite3 *db = NULL;
+	struct engine *e = NULL;
 
 	info = (struct thread_msg *)arg;
+	ASSERT(info != NULL, "consumer: thread_msg* info == NULL");
 
-	err = prepare_thread_run(&hash_table, &db, info->thread_id);
+	err = prepare_thread_run(&e, info->thread_id);
 	if (err == CODE_FAILED)
 		goto error;
 
-	head = info->head;
+	ASSERT(e != NULL, "consumer: e == NULL");
 
-	ASSERT(info != NULL, "consumer: thread_msg* info == NULL");
+	head = info->head;
 	ASSERT(head != NULL, "consumer: head == NULL");
+
+	e->le = (struct lua_engine *)info->rule_engine;
+	ASSERT(e->le != NULL, "consumer: rule_engine != NULL");
 
 	while (true) {
 		err = pthread_mutex_lock(&info->mtx);
@@ -121,7 +140,7 @@ void *consumer(void *arg)
 			if (pthread_mutex_trylock(&(ms->message_state_lock)) ==
 			    0) {
 				if (consume_ms(ms)) {
-					invoke_engine(ms, db, hash_table);
+					invoke_engine(ms, e);
 				}
 				pthread_mutex_unlock(&(ms->message_state_lock));
 			}
@@ -130,7 +149,7 @@ void *consumer(void *arg)
 		pthread_mutex_unlock(&(info->mtx));
 	}
 
-	close_database(db);
+	close_database(e->db);
 
 error:
 	return NULL;

@@ -56,6 +56,7 @@
 #define CLONE_PARENT_SETTID 0x00100000 /* set the TID in the parent */
 #define CLONE_PARENT                                                           \
 	0x00008000 /* set if we want to have the same parent as the cloner */
+#define CLONE_THREAD 0x00010000 /* Same thread group */
 
 /* include/linux/stringify */
 #pragma GCC diagnostic push
@@ -71,5 +72,11 @@
 
 /* include/linux/mm.h */
 #define VM_EXEC 0x00000004
+
+/* arch/x86/include/asm/page_64_types.h */
+#define THREAD_SIZE_ORDER 2
+#define THREAD_SIZE (PAGE_SIZE << THREAD_SIZE_ORDER)
+
+#define TOP_OF_KERNEL_STACK_PADDING 0
 
 #endif // MISSING_DEFS

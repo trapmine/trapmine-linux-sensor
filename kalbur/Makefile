@@ -20,10 +20,33 @@ SAFE = $(UTIL_DIR)/safe_hash.o
 SYMSEARCH = $(UTIL_DIR)/symsearch.o
 HELPERS_FN = $(UTIL_DIR)/helpers.o
 
-RULE_ENGINE = $(DATABASE_DIR)/database.o $(DATABASE_DIR)/rules.o $(DATABASE_DIR)/notifier.o $(ENGINE_DIR)/engine.o $(ENGINE_DIR)/save_ms.o 
+RULE_ENGINE = $(DATABASE_DIR)/database.o \
+			$(DATABASE_DIR)/rules.o \
+			$(ENGINE_DIR)/notifier.o \
+			$(ENGINE_DIR)/engine.o \
+			$(ENGINE_DIR)/save_ms.o \
+			$(LUA_DIR)/lua_engine.o \
+			$(LUA_DIR)/lua_event.o \
+			$(LUA_DIR)/lua_process.o \
+			$(LUA_DIR)/attr_handler.o \
+			$(LUA_DIR)/rule_manager.o \
+			$(LUA_DIR)/lua_ms_tags.o \
+			$(LUA_DIR)/lua_event_info.o \
+			$(LUA_DIR)/lua_file_info.o \
+			$(LUA_DIR)/lua_process_info.o \
+			$(LUA_DIR)/lua_mmap_info.o \
+			$(LUA_DIR)/lua_ptrace_info.o \
+			$(LUA_DIR)/lua_socket_create_info.o \
+			$(LUA_DIR)/lua_tcp_connection_info.o \
+			$(LUA_DIR)/lua_module_load_info.o \
+			$(LUA_DIR)/lua_modprobe_overwrite_info.o \
+			$(LUA_DIR)/lua_process_lpe_info.o \
+			$(LUA_DIR)/lua_helpers.o \
 
 HELPERS = $(HASH) $(RULE_ENGINE) $(SYMSEARCH) $(HELPERS_FN) $(SAFE)
 SQLITE3 = $(INC_DIR)/sqlite3.o
+LUA_OBJ = $(INC_DIR)/liblua.a
+THIRD_PARTY = $(SQLITE3) $(LIBBPF_OBJ) $(LUA_OBJ)
 
 PRELIM_TARGETS = $(patsubst %.c,%.o, $(filter-out %.bpf.c, $(wildcard *.c)))
 PROC_MONITOR = proc_monitor
@@ -33,7 +56,7 @@ MESSAGE_LS = message_ls
 APPS = $(PROC_MONITOR)
 MESSAGE_CONSUMERS = consumer
 
-PROC_MONITOR_LINK_FLAGS = -lelf -lz -ldl -lpthread -lm 
+PROC_MONITOR_LINK_FLAGS = -lelf -lz -ldl -lpthread -lm -lbsd
 
 CLANG_BPF_SYS_INCLUDES = $(shell $(CLANG) -v -E - < /dev/null 2>&1 \
 			 | sed -n '/<...> search starts here:/,/End of search list./{ s| \(/.*\)|-idirafter \1|p }')
@@ -116,7 +139,8 @@ $(PROC_MONITOR).o: $(PROC_MONITOR).c $(wildcard %.h) $(PROC_MONITOR).skel.h
 
 
 # Build application binary
-$(PROC_MONITOR): $(PRELIM_TARGETS) $(SUPPORT) $(LIBBPF_OBJ)
+$(PROC_MONITOR): $(PRELIM_TARGETS) $(SUPPORT) $(THIRD_PARTY)
 	$(call msg,CC,$@)
-	$(Q)$(CC) -static $(CFLAGS) $(INCLUDES) $(HELPERS) $(SQLITE3) $(PRELIM_TARGETS) $(LIBBPF_OBJ) $(PROC_MONITOR_LINK_FLAGS) -o $@
+	$(Q)$(CC) -static $(CFLAGS) $(INCLUDES) $(DEBUG_FLAG) $(HELPERS) $(PRELIM_TARGETS) $(THIRD_PARTY) $(PROC_MONITOR_LINK_FLAGS) -o $@
 
+.PHONY: all clean

@@ -25,6 +25,7 @@
 #include <message_ls.h>
 #include <safe_hash.h>
 #include <stdbool.h>
+#include <lua_engine.h>
 
 #define GARBAGE_COLLECT 5000
 
@@ -244,6 +245,7 @@ static void delete_all_threads(void)
 	for (i = 0; i < thread_num; i++) {
 		pthread_mutex_destroy(&(threads[i]->mtx));
 		pthread_cond_destroy(&(threads[i]->wakeup));
+		free(threads[i]->rule_engine);
 		free(threads[i]);
 	}
 
@@ -280,14 +282,20 @@ static safetable_t *initialize_safetable(void)
 	return init_safetable();
 }
 
-static void initialize_thread_ls(struct msg_list *head)
+static int initialize_thread_ls(struct msg_list *head,
+				struct rules_manager *manager)
 {
+	struct lua_engine *e;
 	size_t i;
 	int err;
 
 	threads = calloc(thread_num, sizeof(struct thread_msg *));
 
 	for (i = 0; i < thread_num; i++) {
+		e = initialize_new_lua_engine(manager);
+		if (e == NULL)
+			return CODE_FAILED;
+
 		threads[i] = calloc(1UL, sizeof(struct thread_msg));
 		if (threads[i] == NULL) {
 			fprintf(stderr,
@@ -295,6 +303,7 @@ static void initialize_thread_ls(struct msg_list *head)
 			exit(1);
 		}
 
+		threads[i]->rule_engine = e;
 		threads[i]->ready = false;
 		threads[i]->die = false;
 		threads[i]->head = head;
@@ -305,9 +314,11 @@ static void initialize_thread_ls(struct msg_list *head)
 		ASSERT(err == 0,
 		       "initialize_thread_ls: pthread_cond_init != 0");
 	}
+
+	return CODE_SUCCESS;
 }
 
-static void init_threads(void)
+static int startup_workers(void)
 {
 	size_t i;
 	int err;
@@ -316,10 +327,14 @@ static void init_threads(void)
 		err = pthread_create(&(threads[i]->thread_id), NULL, &consumer,
 				     threads[i]);
 		if (err != 0) {
-			fprintf(stderr, "Failed to create pthread\n");
-			exit(1);
+			fprintf(stderr,
+				"startup_workers: Failed to create pthread: %d\n",
+				err);
+			return CODE_FAILED;
 		}
 	}
+
+	return CODE_SUCCESS;
 }
 
 static struct callback_ctx *initialize_callback_ctx(struct msg_list *head,
@@ -342,7 +357,7 @@ int main(int argc, char **argv)
 	struct msg_list *head = NULL;
 	struct rlimit limit = { 0 };
 	safetable_t *counter;
-	struct callback_ctx *ctx;
+	struct callback_ctx *ctx = NULL;
 	int err;
 
 	/* Kill this process if parent dies */
@@ -373,14 +388,6 @@ int main(int argc, char **argv)
 		fprintf(stderr, "Failed to initialize database file\n");
 		goto out;
 	}
-
-	/* Initialize number of threads */
-	long num = sysconf(_SC_NPROCESSORS_CONF);
-	if (num < 0) {
-		fprintf(stderr, "Failed to get number of cpus: %ld\n", num);
-	}
-	thread_num = (size_t)(num / 2) + 1;
-
 	/* initialize message list */
 	head = initialize_msg_list();
 	if (head == NULL)
@@ -391,28 +398,51 @@ int main(int argc, char **argv)
 	if (counter == NULL) {
 		fprintf(stderr,
 			"Failed to initialize hashtable for counting process events\n");
-		goto out;
+		goto del_head;
 	}
 
 	/* Initialize perf buffer callback context */
 	ctx = initialize_callback_ctx(head, counter);
+	if (ctx == NULL)
+		goto del_head;
+
+	/* Initialize number of threads */
+	long num = sysconf(_SC_NPROCESSORS_CONF);
+	if (num < 0) {
+		fprintf(stderr, "Failed to get number of cpus: %ld\n", num);
+	}
+	thread_num = (size_t)(num / 2) + 1;
+
+	/* TEMPORARY */
+#define RULES_FILE "/opt/trapmine/rules/config.lua"
+	struct rules_manager *manager = init_rules_manager(RULES_FILE);
+	if (manager == NULL)
+		goto del_head;
+	/* */
 
 	/* Initialize threads */
-	initialize_thread_ls(head);
-	init_threads();
+	err = initialize_thread_ls(head, manager);
+	if (err != CODE_SUCCESS)
+		goto del_head;
+
+	err = startup_workers();
+	if (err != CODE_SUCCESS)
+		goto del_threads;
 
 	err = poll_buff(bpf_map__fd(skel->maps.streamer), consume_kernel_events,
 			handle_lost_events, (void *)ctx);
 
-out:
-	if (head != NULL)
-		free(head);
-
+del_threads:
 	shutdown_threads();
+	delete_all_threads();
+
+del_head:
 	if (head != NULL)
 		head = delete_message_list(head);
 
-	delete_all_threads();
+	if (ctx != NULL)
+		free(ctx);
 
+out:
 	return err < 0 ? 1 : 0;
 }

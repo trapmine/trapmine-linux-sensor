@@ -89,12 +89,21 @@ struct mmap_dump_fmt {
 typedef int (*message_complete_predicate)(struct message_state *);
 
 #define MS_COMPLETE (1UL << 0)
+#define MS_RULES_PROCESSED (1UL << 1)
 #define MS_DB_SAVED (1UL << 2)
 #define MS_GC (1UL << 3)
+#define MS_TAGS_PROCESSED (1UL << 4)
 
 #define IS_MS_COMPLETE(ms) (((ms->progress) & (MS_COMPLETE)) != 0)
+#define IS_MS_RULES_PROCESSED(ms) (((ms->progress) & (MS_RULES_PROCESSED)) != 0)
+#define IS_MS_TAGS_PROCESSED(ms) (((ms->progress) & (MS_TAGS_PROCESSED)) != 0)
 #define IS_MS_DB_SAVED(ms) (((ms->progress) & (MS_DB_SAVED)) != 0)
 #define IS_MS_GC(ms) (((ms->progress) & (MS_GC)) != 0)
+
+#define TAG_ALERT_INDX 0
+#define TAG_HL_INDX 1
+#define TAG_KILL_PROCESS_INDX 2
+#define TOTAL_TAGS 3
 
 struct message_state {
 	pthread_mutex_t message_state_lock;
@@ -112,7 +121,9 @@ struct message_state {
 	struct message_state
 		*prev_msg; // Needed inorder to link and unlink new messages
 	int cpu;
+	int event_id;
 	uint64_t progress;
+	uint64_t tags[TOTAL_TAGS];
 };
 
 int construct_message_state(struct message_state *ms,
@@ -124,5 +135,7 @@ struct probe_event_header *get_event_header(struct message_state *ms);
 void delete_message(struct message_state **ms);
 void transition_ms_progress(struct message_state *ms,
 			    uint64_t transition_target, int prog_err);
+void tag_ms(struct message_state *ms, int indx, unsigned long tag);
+void set_ms_event_id(struct message_state *ms, int event_id);
 
 #endif // MESSAGE_H

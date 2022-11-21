@@ -4,29 +4,19 @@ include $(ROOT_DIR)/Makefile.inc
 
 LIBBPF_SRC := $(abspath ./libbpf/src)
 
-ifeq ($(V),1)
-	Q =
-	msg =
-else
-	Q = @
-	msg = @printf '  %-8s %s%s\n'					\
-		      "$(1)"						\
-		      "$(patsubst $(abspath $(OUTPUT))/%,%,$(2))"	\
-		      "$(if $(3), $(3))";
-endif
+SQLITE := sqlite3
+LUA := $(INC_DIR)/lua.o
 
-SQLITE := sqlite
-
-LIBS := $(LIBBPF_OBJ) $(SQLITE)
+LIBS := $(LIBBPF_OBJ) $(SQLITE) $(LUA)
 
 all: $(LIBS)
 
 clean:
 	$(call msg,CLEAN)
 	$(Q)$(MAKE) -C $(LIBBPF_SRC) clean
+	$(Q)$(MAKE) -C $(LUA_LIB_DIR) clean
 	$(Q)rm -rf *.o
 
-OBJECTS=$(patsubst %.c,%.o,$(wildcard *.c))
 
 $(INC_DIR)/libbpf:
 	$(call msg,MKDIR,$@)
@@ -41,6 +31,16 @@ $(LIBBPF_OBJ): $(wildcard $(LIBBPF_SRC)/*.[ch] $(LIBBPF_SRC)/Makefile) | $(INC_D
 		    install
 
 $(SQLITE):
-	$(call msg,CP,$@)
+	$(call msg,SQLITE,$@)
 	$(Q)$(MAKE) -C $(SQLITE3_DIR) all
 
+$(LUA):
+	$(call msg,LUA,$@)
+	$(MAKE) -C $(LUA_LIB_DIR)
+	$(Q)cp lua/lua.h $(INC_DIR)/lua.h
+	$(Q)cp lua/luaconf.h $(INC_DIR)/luaconf.h
+	$(Q)cp lua/lauxlib.h $(INC_DIR)/lauxlib.h
+	$(Q)cp lua/lualib.h $(INC_DIR)/lualib.h
+	$(Q)cp lua/liblua.a $(INC_DIR)/liblua.a
+
+.PHONY: all clean $(SQLITE) $(LUA)

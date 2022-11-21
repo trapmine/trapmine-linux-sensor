@@ -34,6 +34,7 @@ struct ksym_name_id {
 const struct ksym_name_id symN[] = { { "socket_file_ops", SOCKET_FILE_OPS },
 				     { "tcp_prot", TCP_PROT },
 				     { "inet_stream_ops", INET_OPS },
+				     { "tty_fops", TTY_FOPS },
 				     { "pipefifo_fops", PIPE_FOPS } };
 
 #define SYMS (sizeof(symN) / sizeof(symN[0]))

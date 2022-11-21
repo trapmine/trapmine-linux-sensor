@@ -92,6 +92,8 @@ MESSAGE_HANDLER_FUNC(save_mmap_event)
 
 	HANDLE_FAIL_JUMP(err);
 
+	set_ms_event_id(ms, event_id);
+
 	return err;
 
 out:
@@ -131,7 +133,7 @@ MESSAGE_HANDLER_FUNC(save_execve_event)
 		goto out;
 	}
 
-	err = insert_proc_info(db, ht, ms, event_id, file_id);
+	err = insert_proc_info(db, ht, ms, event_id, eh->tgid_pid, file_id);
 	HANDLE_FAIL_JUMP(err);
 
 	mmap_cnt = pinfo->mmap_cnt;
@@ -152,6 +154,8 @@ MESSAGE_HANDLER_FUNC(save_execve_event)
 			sqlite3_errmsg(db));
 		goto out;
 	}
+
+	set_ms_event_id(ms, event_id);
 
 	return err;
 
@@ -189,7 +193,7 @@ MESSAGE_HANDLER_FUNC(save_fork_and_friends_event)
 		goto out;
 	}
 
-	err = insert_proc_info(db, ht, ms, event_id, file_id);
+	err = insert_proc_info(db, ht, ms, event_id, eh->tgid_pid, file_id);
 	HANDLE_FAIL_JUMP(err);
 
 	err = commit_transaction(db, ht);
@@ -199,6 +203,8 @@ MESSAGE_HANDLER_FUNC(save_fork_and_friends_event)
 			sqlite3_errmsg(db));
 
 	HANDLE_FAIL_JUMP(err);
+
+	set_ms_event_id(ms, event_id);
 
 	return err;
 
@@ -240,6 +246,8 @@ MESSAGE_HANDLER_FUNC(save_socket_create_event)
 
 	HANDLE_FAIL_JUMP(err);
 
+	set_ms_event_id(ms, event_id);
+
 	return err;
 out:
 	rollback_err = rollback_transaction(db, ht);
@@ -274,6 +282,8 @@ MESSAGE_HANDLER_FUNC(save_tcp_connection_event)
 			sqlite3_errmsg(db));
 
 	HANDLE_FAIL_JUMP(err);
+
+	set_ms_event_id(ms, event_id);
 
 	return err;
 out:
@@ -390,6 +400,8 @@ MESSAGE_HANDLER_FUNC(save_ptrace_event)
 
 	HANDLE_FAIL_JUMP(err);
 
+	set_ms_event_id(ms, event_id);
+
 	return err;
 
 out:
@@ -435,6 +447,8 @@ MESSAGE_HANDLER_FUNC(save_kernel_module_load_info)
 
 	HANDLE_FAIL_JUMP(err);
 
+	set_ms_event_id(ms, event_id);
+
 	return err;
 
 out:
@@ -447,7 +461,36 @@ out:
 
 MESSAGE_HANDLER_FUNC(save_exit_event)
 {
-	return CODE_SUCCESS;
+	int err, event_id, rollback_err;
+
+	err = begin_transaction(db, ht);
+	if (err != CODE_SUCCESS)
+		return err;
+
+	event_id = insert_event(db, ht,
+				(struct probe_event_header *)ms->primary_data);
+	if (ERR_NOT_SUCCESS(event_id)) {
+		err = event_id;
+		goto out;
+	}
+
+	err = commit_transaction(db, ht);
+	if (err == CODE_FAILED)
+		fprintf(stderr,
+			"save_exit_event: failed to commit transaction: %s\n",
+			sqlite3_errmsg(db));
+
+	HANDLE_FAIL_JUMP(err);
+
+	set_ms_event_id(ms, event_id);
+
+	return err;
+
+out:
+	rollback_err = rollback_transaction(db, ht);
+	ASSERT(rollback_err == CODE_SUCCESS,
+	       "save_exit_event: err (rollback_transaction) != CODE_SUCCESS");
+	return err;
 }
 
 int save_msg(sqlite3 *db, hashtable_t *hash_table, struct message_state *ms)
@@ -475,6 +518,8 @@ int save_msg(sqlite3 *db, hashtable_t *hash_table, struct message_state *ms)
 		return save_fork_and_friends_event(db, hash_table, ms);
 	case (SYS_CLONE):
 		return save_fork_and_friends_event(db, hash_table, ms);
+	case (SYS_CLONE3):
+		return save_fork_and_friends_event(db, hash_table, ms);
 	case (SYS_PTRACE):
 		return save_ptrace_event(db, hash_table, ms);
 	case (SYS_FINIT_MODULE):
@@ -490,4 +535,3 @@ int save_msg(sqlite3 *db, hashtable_t *hash_table, struct message_state *ms)
 		return CODE_FAILED;
 	}
 }
-

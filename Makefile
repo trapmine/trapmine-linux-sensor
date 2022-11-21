@@ -42,7 +42,7 @@ $(TESTS):
 
 $(LIB):
 	$(call msg,LIB,$@)
-	$(Q)$(MAKE) -C $(LIB_DIR)
+	$(Q)$(MAKE) -C $(LIB_DIR) all
 
 clean:
 	$(Q)$(MAKE) -C $(KALBUR_DIR) clean

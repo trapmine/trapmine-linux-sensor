@@ -49,4 +49,11 @@
 		}                                                              \
 	} while (0)
 
+#define SQLITE3_GET(dest, type, index)                                         \
+	_Pragma(STRINGIFY(GCC diagnostic push)) _Pragma(                       \
+		STRINGIFY(GCC diagnostic ignored "-Wtraditional-conversion"))  \
+		_Pragma(STRINGIFY(GCC diagnostic ignored "-Wsign-conversion")) \
+			dest = sqlite3_column_##type(ppStmt, index);           \
+	_Pragma(STRINGIFY(GCC diagnostic pop))
+
 #endif // HELPER_DEFS_H

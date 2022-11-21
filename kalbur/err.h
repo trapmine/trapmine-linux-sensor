@@ -20,6 +20,7 @@
 #define CODE_RETRY -2
 
 #define ERR_NOT_SUCCESS(err) ((err == CODE_FAILED) || (err == CODE_RETRY))
+#define VALID_ERR_VAL(err) ((ERR_NOT_SUCCESS(err)) || (err == CODE_SUCCESS))
 
 #define MAX_ERRNO (4095UL)
 
