@@ -449,7 +449,7 @@ int insert_mmap_info(sqlite3 *db, hashtable_t *ht, struct proc_mmap *pm,
 //}
 
 int insert_proc_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
-		     int event_id, int file_id)
+		     int event_id, u64_t tgid_pid, int file_id)
 {
 	sqlite3_stmt *ppStmt;
 	unsigned long sock_id;
@@ -482,6 +482,10 @@ int insert_proc_info(sqlite3 *db, hashtable_t *ht, struct message_state *ms,
 			 (pinfo->ppid >> 32) & 0xFFFFFFFF);
 	SQLITE3_BIND_INT("insert_proc_info", int64, PARENT_PID,
 			 pinfo->ppid & 0xFFFFFFFF);
+	SQLITE3_BIND_INT("insert_proc_info", int64, TGID,
+			 (tgid_pid >> 32) & 0xFFFFFFFF);
+	SQLITE3_BIND_INT("insert_proc_info", int64, PID,
+			 tgid_pid & 0xFFFFFFFF);
 	SQLITE3_BIND_INT("insert_proc_info", int, UID, pinfo->credentials.uid);
 	SQLITE3_BIND_INT("insert_proc_info", int, GID, pinfo->credentials.gid);
 	SQLITE3_BIND_INT("insert_proc_info", int, EUID,

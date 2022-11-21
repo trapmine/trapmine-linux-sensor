@@ -133,7 +133,7 @@ MESSAGE_HANDLER_FUNC(save_execve_event)
 		goto out;
 	}
 
-	err = insert_proc_info(db, ht, ms, event_id, file_id);
+	err = insert_proc_info(db, ht, ms, event_id, eh->tgid_pid, file_id);
 	HANDLE_FAIL_JUMP(err);
 
 	mmap_cnt = pinfo->mmap_cnt;
@@ -193,7 +193,7 @@ MESSAGE_HANDLER_FUNC(save_fork_and_friends_event)
 		goto out;
 	}
 
-	err = insert_proc_info(db, ht, ms, event_id, file_id);
+	err = insert_proc_info(db, ht, ms, event_id, eh->tgid_pid, file_id);
 	HANDLE_FAIL_JUMP(err);
 
 	err = commit_transaction(db, ht);
