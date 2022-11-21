@@ -2480,7 +2480,7 @@ int kretprobe__copy_process(struct pt_regs *ctx)
 	u64 child_tgid_pid;
 
 	// get userspace registers
-	current = bpf_get_current_task_btf();
+	current = (struct task_struct *)bpf_get_current_task();
 	err = get_registers(current, &user_regs);
 	JUMP_TARGET(out);
 
