@@ -160,7 +160,7 @@ int poll_buff(int streamer_fd, perf_buffer_sample_fn consumer,
 	long libbpf_err;
 	int err;
 
-	pb_opts.sz = sz;
+	pb_opts.sz = 0;
 
 #define PERF_BUFFER_PAGES 64UL
 	pb = perf_buffer__new(streamer_fd, PERF_BUFFER_PAGES, consumer, err_fn, ctx, &pb_opts);
