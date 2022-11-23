@@ -92,11 +92,6 @@ int initialize_database(char *dbname)
 		return CODE_FAILED;
 	}
 
-	// // return success if db exists.
-	// if (!stat(dbname, &sb)) {
-	// 	return CODE_SUCCESS;
-	// }
-
 	err = sqlite3_open(dbname, &db);
 	if (err) {
 		fprintf(stderr, "Can't open database: %s\n",
