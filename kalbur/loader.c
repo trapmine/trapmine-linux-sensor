@@ -160,10 +160,12 @@ int poll_buff(int streamer_fd, perf_buffer_sample_fn consumer,
 	long libbpf_err;
 	int err;
 
-	pb_opts.sz = 0;
+	pb_opts.sample_cb = consumer;
+	pb_opts.lost_cb = err_fn;
+	pb_opts.ctx = ctx;
 
 #define PERF_BUFFER_PAGES 64UL
-	pb = perf_buffer__new(streamer_fd, PERF_BUFFER_PAGES, consumer, err_fn, ctx, &pb_opts);
+	pb = perf_buffer__new(streamer_fd, PERF_BUFFER_PAGES, &pb_opts);
 	libbpf_err = libbpf_get_error(pb);
 	if (libbpf_err) {
 		pb = NULL;
