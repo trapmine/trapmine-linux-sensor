@@ -1,32 +1,62 @@
 #include "lua_helpers.h"
 
-int is_disallowed_parent(lua_State *L)
+int get_variables(lua_State *L)
 {
-	int is_disallowed;
 	struct lua_db *db;
-	const char *comm;
+	const char *variable_key;
+	struct lua_variable_vals_array *variable_vals;
+	int err;
 
 	if (!lua_isstring(L, -1)) {
-		fprintf(stderr, "is_disallowed_parent: stack[-1] not string\n");
+		fprintf(stderr, "get_variables: stack[-1] not string\n");
 		lua_pop(L, 1);
 		lua_pushnil(L);
 		return 1;
 	}
 
-	comm = lua_tostring(L, -1);
+	variable_key = lua_tostring(L, -1);
+
+	variable_vals =
+			(struct lua_variable_vals_array *)malloc(
+				sizeof(struct lua_variable_vals_array));
+		variable_vals->max_size = VARIABLE_VALS_CHUNK_SIZE;
+		variable_vals->size = 0;
+		variable_vals->values =
+			(struct lua_variable_val **)malloc(
+				sizeof(struct lua_variable_val *) *
+				(size_t)variable_vals->max_size);
 
 	db = get_lua_db(L);
-	is_disallowed =
-		select_comm_in_diasllowed(db->db, db->sqlite_stmts, comm);
+	err = select_variable_vals(db->db, db->sqlite_stmts, variable_key, variable_vals);
 
-	if (is_disallowed == CODE_FAILED) {
+	if (err == CODE_FAILED) {
 		lua_pop(L, 1);
 		lua_pushnil(L);
 		return 1;
 	}
 
 	lua_pop(L, 1);
-	lua_pushboolean(L, is_disallowed);
+	lua_createtable(L, variable_vals->size, 0);
+
+	for(int i = 0; i < variable_vals->size; i++) {
+		lua_pushstring(L, variable_vals->values[i]->val);
+		lua_rawseti(L, -2, i);
+	}
+
+	for(int i = 0; i < variable_vals->size; i++) {
+		if(variable_vals->values[i]) {
+			if(variable_vals->values[i]->val) {
+				free(variable_vals->values[i]->val);
+			}
+			free(variable_vals->values[i]);
+		}
+	}
+
+	variable_vals->size = 0;
+	variable_vals->max_size = 0;
+	free(variable_vals);
+	variable_vals = NULL;
+
 	return 1;
 }
 
@@ -81,9 +111,9 @@ void init_helpers(lua_State *L, sqlite3 *db, hashtable_t *sqlite_stmts)
 
 	lua_settable(L, LUA_REGISTRYINDEX);
 
-	// expose global get_process_by_pid function
-	lua_pushcfunction(L, is_disallowed_parent);
-	lua_setglobal(L, "is_disallowed_parent");
+	// expose global get_variables function
+	lua_pushcfunction(L, get_variables);
+	lua_setglobal(L, "get_variables");
 }
 
 /**

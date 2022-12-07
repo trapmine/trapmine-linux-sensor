@@ -11,13 +11,24 @@
 #include "err.h"
 
 #define GLOBAL_LUA_DB "SENSOR_DB"
+#define VARIABLE_VALS_CHUNK_SIZE 10
 
 struct lua_db {
 	sqlite3 *db;
 	hashtable_t *sqlite_stmts;
 };
 
-int is_disallowed_parent(lua_State *L);
+struct lua_variable_val {
+	char *val;
+};
+
+typedef struct lua_variable_vals_array {
+	int max_size;
+	int size;
+	struct lua_variable_val **values;
+} lua_variable_vals_array;
+
+int get_variables(lua_State *L);
 
 struct lua_db *get_lua_db(lua_State *L);
 

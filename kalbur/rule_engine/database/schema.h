@@ -211,12 +211,6 @@
 	")\
 			);"
 
-/* Disallowed parents for shell */
-#define DISALLOWED_TABLE                                                       \
-	"CREATE table  IF NOT EXISTS disallowed(\
-				" COMM " TEXT NOT NULL\
-			);"
-
 /* Kernel module load */
 #define KERNEL_MODULE_LOAD_TABLE                                               \
 	"CREATE TABLE  IF NOT EXISTS module_load(\
@@ -237,5 +231,10 @@
 				FOREIGN KEY(" EVENT_ID                         \
 	") REFERENCES events(" EVENT_ID ") \
 				);"
+
+/* variables table */
+#define VARIABLES_TABLE "variables"
+#define VARIABLE_VAL "variable_val"
+#define VARIABLE_KEY "variable_key"
 
 #endif // SCHEMA_H
