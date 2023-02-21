@@ -153,7 +153,7 @@ static void free_rule_list(struct rule_list *r)
 		tmp = r;
 		r = r->next_rule;
 		free(tmp->rule_bytecode);
-		free(r->script_name);
+		free(tmp->script_name);
 		free(tmp);
 	}
 }
