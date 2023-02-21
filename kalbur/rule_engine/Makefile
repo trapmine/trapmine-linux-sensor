@@ -7,8 +7,9 @@ ENGINE := engine
 SAVE_MS := save_ms
 LUA := lua
 NOTIFIER := notifier
+LISTENER := listener
 
-all: $(DATABASE) $(ENGINE).o $(SAVE_MS).o $(LUA) $(NOTIFIER).o
+all: $(DATABASE) $(ENGINE).o $(SAVE_MS).o $(LUA) $(NOTIFIER).o $(LISTENER).o
 
 $(LUA):
 	$(call msg,LUA,$@)
@@ -29,6 +30,10 @@ $(SAVE_MS).o: $(SAVE_MS).c $(SAVE_MS).h
 $(NOTIFIER).o: $(NOTIFIER).c $(NOTIFIER).h
 	$(call msg,CC,$@)
 	$(Q)$(CC) -DAPPLY_ASSERT $(CFLAGS) $(INCLUDES) -c $(NOTIFIER).c -o $@
+
+$(LISTENER).o: $(LISTENER).c $(LISTENER).h
+	$(call msg,CC,$@)
+	$(Q)$(CC) -DAPPLY_ASSERT $(CFLAGS) $(INCLUDES) -c $(LISTENER).c -o $@
 
 clean:
 	$(call msg,CLEAN)
