@@ -3369,7 +3369,7 @@ int tc_traffic_drop(struct __sk_buff *skb) {
 	}
 
 	// network isolation is off, so allow all traffic
-	if (*isolation_switch == 0) {
+	if (*isolation_switch == NETWORK_ISOLATION_OFF) {
 		bpf_printk("tc_traffic_drop: network_isolation_switch is off\n");
 		return TC_ACT_OK;
 	}

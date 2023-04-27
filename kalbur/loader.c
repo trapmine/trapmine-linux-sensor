@@ -13,18 +13,24 @@
 #include <stdbool.h>
 #include <symsearch.h>
 #include <sys/resource.h>
-#include <linux/perf_event.h>
 #include <linux/hw_breakpoint.h>
+#include <net/if.h>
 #include <sys/syscall.h>
 #include <events.h>
 #include <stdbool.h>
 #include <loader.h>
-#include "missing_defs.h"
 
 #define KPROBE_TABLE 0
 #define TRACEPOINT_TABLE 1
 #define BPF_PROG_FDS 2
 int progfds[BPF_PROG_FDS] = { 0 };
+
+
+static int network_isolation_switch_fd = -1;
+static int network_isolation_whitelist_ips_fd = -1;
+static size_t tc_hooks_count = 0;
+static size_t max_tc_hooks_count = 10;
+static struct tc_hooks_set **tc_hooks_ptr = NULL;
 
 struct ksym_name_id {
 	char *name;
@@ -59,6 +65,22 @@ static int libbpf_print_fn(enum libbpf_print_level level, const char *format,
 	return vfprintf(stderr, format, args);
 #endif
 	return 0;
+}
+
+static void copy_bpf_tc_hook(struct bpf_tc_hook* dst, struct bpf_tc_hook* src) {
+    dst->sz = src->sz;
+    dst->ifindex = src->ifindex;
+    dst->attach_point = src->attach_point;
+    dst->parent = src->parent;
+}
+
+static void copy_bpf_tc_opts(struct bpf_tc_opts* dst, struct bpf_tc_opts* src) {
+    dst->sz = src->sz;
+    dst->prog_fd = src->prog_fd;
+	dst->flags = src->flags;
+	dst->prog_id = src->prog_id;
+	dst->handle = src->handle;
+	dst->priority = src->priority;
 }
 
 static inline int populuate_prog_array(struct bpf_program *prog, int key,
@@ -233,10 +255,29 @@ struct proc_monitor_bpf *load(void)
 		addr = ksym_get_addr(symN[i].name);
 
 		err = bpf_map_update_elem(symtab_fd, &addr, &(symN[i].id),
-					  BPF_ANY);
+					  (unsigned long long)BPF_ANY);
 
 		if (err != 0)
 			goto cleanup;
+	}
+
+	/* Populate network isolation switch map*/
+	network_isolation_switch_fd = bpf_object__find_map_fd_by_name(obj, "network_isolation_switch");
+	if (network_isolation_switch_fd < 0) {
+		fprintf(stderr, "finding map network_isolation_switch failed in bpf obj.\n");
+		goto cleanup;
+	}
+	int network_isolation_idx = 0;
+	int network_isolation_value = NETWORK_ISOLATION_OFF;
+	err = bpf_map_update_elem(network_isolation_switch_fd, &network_isolation_idx, &network_isolation_value, (unsigned long long)BPF_ANY);
+	if (err != 0)
+		goto cleanup;
+
+	/* Populate network isolation whitelist ips*/
+	network_isolation_whitelist_ips_fd = bpf_object__find_map_fd_by_name(obj, "network_isolation_whitelist_ips");
+	if (network_isolation_whitelist_ips_fd < 0) {
+		fprintf(stderr, "finding map network_isolation_whitelist_ips failed in bpf obj.\n");
+		goto cleanup;
 	}
 
 	/* Attach sub programs */
@@ -278,16 +319,98 @@ struct proc_monitor_bpf *load(void)
 
 				goto cleanup;
 			}
-		} else {
-			if (check_kprobe_function(section)) {
-				printf("Attaching %s\n", section);
-				link = bpf_program__attach(prog);
-				if (libbpf_get_error(link)) {
-					fprintf(stderr,
-						"bpf_program__attach failed: %s\n",
-						section);
-					goto cleanup;
-				}
+		} else if (!memcmp(section, "tc", 2UL)) {
+			// get all interfaces
+			struct if_nameindex *if_nidxs, *intf;
+
+		    if_nidxs = if_nameindex();
+    		if ( if_nidxs != NULL ) {
+		        for (intf = if_nidxs; intf->if_index != 0 || intf->if_name != NULL; intf++) {
+					printf("Attaching %s (%s) to %s interface\n", section, bpf_program__name(prog), intf->if_name);
+					int ifindex = (int)intf->if_index;
+
+					// create egress and ingress hook
+					DECLARE_LIBBPF_OPTS(bpf_tc_hook, egress_hook, .ifindex = ifindex, .attach_point = BPF_TC_EGRESS);
+					DECLARE_LIBBPF_OPTS(bpf_tc_hook, ingress_hook, .ifindex = ifindex, .attach_point = BPF_TC_INGRESS);
+
+					// create egress|ingress hook
+					DECLARE_LIBBPF_OPTS(bpf_tc_hook, hook, .ifindex = ifindex, .attach_point = BPF_TC_INGRESS|BPF_TC_EGRESS);
+
+					// try to delete old clsact qdisc
+					err = bpf_tc_hook_destroy(&hook);
+					if (err) {
+						fprintf(stderr, "Failed to delete tc clsact qdisc: %d\n", err);
+					}
+					
+					// create a clsact qdisc
+					err = bpf_tc_hook_create(&hook);
+					if (err) {
+						fprintf(stderr, "Failed to create tc clsact qdisc\n");
+						goto cleanup;
+					}
+
+					int fd = bpf_program__fd(prog);
+
+					// create egress and ingress options
+					DECLARE_LIBBPF_OPTS(bpf_tc_opts, egress_opts, .prog_fd = fd);
+					DECLARE_LIBBPF_OPTS(bpf_tc_opts, ingress_opts, .prog_fd = fd);
+
+					// attach egress filter
+					err = bpf_tc_attach(&egress_hook, &egress_opts);
+					if (err) {
+						fprintf(stderr, "Failed to attach tc egress hook\n");
+
+						egress_hook.attach_point = BPF_TC_INGRESS | BPF_TC_EGRESS;
+						bpf_tc_hook_destroy(&egress_hook);
+						goto cleanup;
+					}
+
+					// attach ingress filter
+					err = bpf_tc_attach(&ingress_hook, &ingress_opts);
+					if (err) {
+						fprintf(stderr, "Failed to attach tc ingress hook\n");
+
+						ingress_hook.attach_point = BPF_TC_INGRESS | BPF_TC_EGRESS;
+						bpf_tc_hook_destroy(&ingress_hook);
+						goto cleanup;
+					}
+
+					// store the hooks and options in an array
+					// so we can detach and destroy them later
+					struct tc_hook *tc_egress_hook_curr = (struct tc_hook *)calloc(1UL, sizeof(struct tc_hook));
+					struct tc_hook *tc_ingress_hook_curr = (struct tc_hook *)calloc(1UL, sizeof(struct tc_hook));
+					
+					copy_bpf_tc_hook(&tc_egress_hook_curr->hook, &egress_hook);
+					copy_bpf_tc_opts(&tc_egress_hook_curr->opts, &egress_opts);
+
+					copy_bpf_tc_hook(&tc_ingress_hook_curr->hook, &ingress_hook);
+					copy_bpf_tc_opts(&tc_ingress_hook_curr->opts, &ingress_opts);
+
+					struct tc_hooks_set *tc_hooks_curr = (struct tc_hooks_set *)calloc(1UL, sizeof(struct tc_hooks_set));
+					tc_hooks_curr->egress = tc_egress_hook_curr;
+					tc_hooks_curr->ingress = tc_ingress_hook_curr;
+
+					if (tc_hooks_count == 0) {
+						tc_hooks_ptr = (struct tc_hooks_set **)calloc(max_tc_hooks_count, sizeof(struct tc_hooks_set *));
+					} else if (tc_hooks_count == max_tc_hooks_count) {
+						max_tc_hooks_count *= 2;
+						tc_hooks_ptr = (struct tc_hooks_set **)realloc(tc_hooks_ptr, sizeof(struct tc_hooks_set *) * (max_tc_hooks_count));
+					}
+
+					tc_hooks_ptr[tc_hooks_count] = tc_hooks_curr;
+
+					tc_hooks_count++;
+        		}
+	        	if_freenameindex(if_nidxs);
+    		}
+		} else if (check_kprobe_function(section)) {
+			printf("Attaching %s\n", section);
+			link = bpf_program__attach(prog);
+			if (libbpf_get_error(link)) {
+				fprintf(stderr,
+					"bpf_program__attach failed: %s\n",
+					section);
+				goto cleanup;
 			}
 		}
 	}
