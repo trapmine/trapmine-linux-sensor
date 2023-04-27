@@ -5,6 +5,7 @@ int get_variables(lua_State *L)
 	struct lua_db *db;
 	const char *variable_key;
 	struct lua_variable_vals_array *variable_vals;
+	int rule_id;
 	int err;
 
 	if (!lua_isstring(L, -1)) {
@@ -26,8 +27,9 @@ int get_variables(lua_State *L)
 				sizeof(struct lua_variable_val *) *
 				(size_t)variable_vals->max_size);
 
+	rule_id = get_rule_id(L);
 	db = get_lua_db(L);
-	err = select_variable_vals(db->db, db->sqlite_stmts, variable_key, variable_vals);
+	err = select_variable_vals(db->db, db->sqlite_stmts, variable_key, rule_id, variable_vals);
 
 	if (err == CODE_FAILED) {
 		lua_pop(L, 1);
@@ -61,6 +63,28 @@ int get_variables(lua_State *L)
 }
 
 /**
+ * @brief Get the rule id of current lua script from the lua registry
+ * Stack: [-0, +0]
+ * 
+ * @param L The lua state.
+ * @return int The rule id of current lua script
+ */
+int get_rule_id(lua_State *L)
+{
+	int rule_id;
+
+	lua_pushstring(L, GLOBAL_RULE_ID);
+	lua_gettable(L, LUA_REGISTRYINDEX);
+	ASSERT(lua_isnumber(L, -1), "get_rule_id: global rule id not found");
+
+	rule_id = (int)lua_tointeger(L, -1);
+	ASSERT(rule_id != 0, "get_rule_id: global rule id not found");
+	lua_pop(L, 1);
+
+	return rule_id;
+}
+
+/**
  * @brief Get the global lua db object
  * Stack: [-0, +0]
  * 
@@ -81,6 +105,31 @@ struct lua_db *get_lua_db(lua_State *L)
 	lua_pop(L, 1);
 
 	return db;
+}
+
+void setup_rule_context(lua_State *L, char *rule_name)
+{
+	int rule_id;
+	size_t rule_name_len;
+	int id_offset = 0;
+	ASSERT(L != NULL, "setup_rule_context: L == NULL");
+	ASSERT(rule_name != NULL, "setup_rule_context: rule_name == NULL");
+
+	rule_name_len = strlen(rule_name);
+	for(int i = (int)rule_name_len - 1; i >= 0; i--) {
+		if(rule_name[i] == '_') {
+			id_offset = i + 1;
+			break;
+		}
+	}
+
+	ASSERT(id_offset > 0, "setup_rule_context: id_offset <= 0");
+	rule_id = atoi(rule_name + id_offset);
+	ASSERT(rule_id != 0, "setup_rule_context: rule_id == 0");
+
+	lua_pushstring(L, GLOBAL_RULE_ID);
+	lua_pushinteger(L, (long)rule_id);
+	lua_settable(L, LUA_REGISTRYINDEX);
 }
 
 /**
