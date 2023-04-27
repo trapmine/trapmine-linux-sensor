@@ -12,6 +12,7 @@
 #define _GNU_SOURCE
 #include <sys/resource.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <consumer.h>
 #include <err.h>
@@ -30,7 +31,8 @@
 
 #define GARBAGE_COLLECT 5000
 
-pthread_t listener;
+pthread_t config_listener;
+pthread_t network_isolation_config_listener;
 static struct thread_msg **threads;
 size_t thread_num;
 sig_atomic_t cleaning_up = 0;
@@ -299,7 +301,12 @@ static void shutdown_threads(void)
 		}
 	}
 
-	err = pthread_join(listener, NULL);
+	err = pthread_join(config_listener, NULL);
+	if (err != 0) {
+		perror("handle_exit");
+	}
+
+	err = pthread_join(network_isolation_config_listener, NULL);
 	if (err != 0) {
 		perror("handle_exit");
 	}
@@ -469,7 +476,12 @@ int main(int argc, char **argv)
 	}
 	thread_num = (size_t)(num / 2) + 1;
 
-	err = pthread_create(&listener, NULL, listen_config, NULL);
+	err = pthread_create(&config_listener, NULL, listen_config, NULL);
+	if (err != 0) {
+		goto del_head;
+	}
+
+	err = pthread_create(&network_isolation_config_listener, NULL, listen_network_isolation_config, NULL);
 	if (err != 0) {
 		goto del_head;
 	}

@@ -2,6 +2,7 @@
 #include "proc_monitor.h"
 
 #define CONFIG_SOCK_PATH "/opt/trapmine/configsock"
+#define NETWORK_ISOLATION_CONFIG_SOCK_PATH "/opt/trapmine/network_isolation_configsock"
 #define BACKLOG 1
 
 // closes the fd on error.
@@ -46,6 +47,50 @@ out:
 
 ret:
 	return err;
+}
+
+void *listen_network_isolation_config(void *arg)
+{
+    int err;
+    int sfd;
+    int cfd;
+    ssize_t bytesRead;
+    struct network_isolation_config config;
+
+    err = init_listener(NETWORK_ISOLATION_CONFIG_SOCK_PATH, &sfd);
+    if (err != CODE_SUCCESS) {
+        fprintf(stderr, "listen_network_isolation_config: init_socket failed\n");
+        goto ret;
+    }
+
+    for(;;) {
+        cfd = accept(sfd, NULL, NULL);
+        if (cfd == -1) {
+            fprintf(stderr, "listen_network_isolation_config: accept syscall failed\n");
+            goto ret;
+        }
+
+        memset(&config, 0, sizeof(struct network_isolation_config));
+
+        while ((bytesRead = read(cfd, (void *) &config, sizeof(struct network_isolation_config))) > 0) {
+        }
+
+        if (bytesRead == -1) {
+            fprintf(stderr, "listen_network_isolation_config: read syscall failed\n");
+            goto try_close;
+        }
+
+        handle_network_isolation_config(&config);
+
+        close(cfd);
+    }
+
+try_close:
+    if (cfd > 0) {
+        close(cfd);
+    }
+ret:
+    return NULL;
 }
 
 void *listen_config(void *arg)

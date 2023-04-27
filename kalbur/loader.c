@@ -203,6 +203,52 @@ int poll_buff(int streamer_fd, perf_buffer_sample_fn consumer,
 	return CODE_SUCCESS;
 }
 
+void handle_network_isolation_config(struct network_isolation_config *config)
+{
+	int err;
+	uint32_t idx;
+	uint32_t value;
+	uint32_t ip_indices[NETWORK_ISOLATION_WHITELIST_IPS_MAX];
+	uint32_t ip_values[NETWORK_ISOLATION_WHITELIST_IPS_MAX];
+	uint32_t number_of_ips = NETWORK_ISOLATION_WHITELIST_IPS_MAX;
+
+	// delete old entries from network_isolation_whitelist_ips
+	for(uint32_t i = 0; i < NETWORK_ISOLATION_WHITELIST_IPS_MAX; i++) {
+		ip_indices[i] = i;
+		ip_values[i] = 0;
+	}
+	DECLARE_LIBBPF_OPTS(bpf_map_batch_opts, delete_opts, .elem_flags = BPF_ANY);
+	err = bpf_map_update_batch(network_isolation_whitelist_ips_fd, &ip_indices, &ip_values, &number_of_ips, &delete_opts);
+	if (err != 0) {
+		fprintf(stderr, "deleting old entries from network_isolation_whitelist_ips failed.: %d\n", err);
+		goto ret;
+	}
+
+	for(uint32_t i = 0; i < config->number_of_ips; i++) {
+		ip_indices[i] = i;
+		ip_values[i] = config->ips[i];
+	}
+	DECLARE_LIBBPF_OPTS(bpf_map_batch_opts, add_opts, .elem_flags = BPF_ANY);
+	err = bpf_map_update_batch(network_isolation_whitelist_ips_fd, &ip_indices, &ip_values, &number_of_ips, &delete_opts);
+	if (err != 0) {
+		fprintf(stderr, "adding new entries in network_isolation_whitelist_ips failed.: %d\n", err);
+		goto ret;
+	}
+
+	idx = NETWORK_ISOLATION_IDX;
+	value = NETOWRK_ISOLATION_ON ? config->enable_network_isolation : NETOWRK_ISOLATION_OFF;
+	err = bpf_map_update_elem(network_isolation_switch_fd, &idx, &value, (unsigned long long)BPF_ANY);
+	if (err != 0) {
+		fprintf(stderr, "updating network_isolation_switch failed.\n");
+		goto ret;
+	}
+
+ret:
+	return;
+
+}
+
+
 struct proc_monitor_bpf *load(void)
 {
 	struct proc_monitor_bpf *skel = NULL;
