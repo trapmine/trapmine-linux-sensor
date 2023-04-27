@@ -236,7 +236,7 @@ void handle_network_isolation_config(struct network_isolation_config *config)
 	}
 
 	idx = NETWORK_ISOLATION_IDX;
-	value = NETOWRK_ISOLATION_ON ? config->enable_network_isolation : NETOWRK_ISOLATION_OFF;
+	value = NETWORK_ISOLATION_ON ? config->enable_network_isolation : NETWORK_ISOLATION_OFF;
 	err = bpf_map_update_elem(network_isolation_switch_fd, &idx, &value, (unsigned long long)BPF_ANY);
 	if (err != 0) {
 		fprintf(stderr, "updating network_isolation_switch failed.\n");
