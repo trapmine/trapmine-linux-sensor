@@ -15,6 +15,7 @@
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_core_read.h>
 #include "syscall_defs.h"
+#include "network_isolation.h"
 
 // ***********************************
 // ******** Error Codes **************
@@ -323,6 +324,12 @@ BPF_PROG_ARRAY(tprog_table, NR_ROUTINES);
 
 /* Table holding the addresses of some kernel symbols */
 BPF_HASH_MAP(symbol_table, u64, u32, 10);
+
+/* Array to hold Whitelist IPs*/
+BPF_ARRAY_MAP(network_isolation_whitelist_ips, u32, NETWORK_ISOLATION_WHITELIST_IPS_MAX);
+
+/* BPF map containing switch to network isolation*/
+BPF_HASH_MAP(network_isolation_switch, u32, u32, 1);
 
 enum t_typename { TYPENAME_STRBUFF_T, TYPENAME_MMAP_BUFF_T };
 
@@ -3303,6 +3310,73 @@ handle_exit:
 out:
 	return 0;
 }
+
+
+__attribute__((always_inline)) static int drop_traffic(struct __sk_buff *skb) {
+	void *data_end = (void *)(long)skb->data_end;
+    void *data = (void *)(long)skb->data;
+    struct ethhdr *eth = data;
+	struct iphdr *iph;
+	u32 src_ip;
+	u32 dest_ip;
+
+	// check packet size
+  	if ((void *)eth + sizeof(*eth) > data_end) {
+		return TC_ACT_OK;
+  	}
+
+  	// check if the packet is an IP packet
+  	if(bpf_ntohs(eth->h_proto) != ETH_P_IP) {
+		return TC_ACT_OK;
+  	}
+
+  	// get the ip header of the packet
+  	iph = data + sizeof(struct ethhdr);
+  	if ((void *)iph + sizeof(*iph) > data_end) {
+		return TC_ACT_OK;
+  	}
+  	
+	src_ip = bpf_ntohl(iph->saddr);
+	dest_ip = bpf_ntohl(iph->daddr);
+
+	for (u32 i = 0; i < NETWORK_ISOLATION_WHITELIST_IPS_MAX; i++) {
+		u32 *whitelist_ip;
+		u32 idx = i;
+		whitelist_ip = bpf_map_lookup_elem(&network_isolation_whitelist_ips, &idx);
+		if (whitelist_ip == 0) {
+			bpf_printk("drop_traffic: failed to lookup network_isolation_whitelist_ips[%d]\n", idx);
+			continue;
+		}
+
+		if (*whitelist_ip == src_ip || *whitelist_ip == dest_ip) {
+			bpf_printk("drop_traffic: whitelist_ip: %u, src_ip: %u, dest_ip: %u\n", *whitelist_ip, src_ip, dest_ip);
+			return TC_ACT_OK;
+		}
+	}
+
+	return TC_ACT_SHOT;
+}
+
+SEC("tc")
+int tc_traffic_drop(struct __sk_buff *skb) {
+	// check if network_isolation switch is off
+	u32 *isolation_switch;
+	u32 network_isolation_idx = NETWORK_ISOLATION_IDX;
+	isolation_switch = bpf_map_lookup_elem(&network_isolation_switch, &network_isolation_idx);
+	if (isolation_switch == 0) {
+		bpf_printk("tc_traffic_drop: failed to lookup network_isolation_switch\n");
+		return TC_ACT_OK;
+	}
+
+	// network isolation is off, so allow all traffic
+	if (*isolation_switch == 0) {
+		bpf_printk("tc_traffic_drop: network_isolation_switch is off\n");
+		return TC_ACT_OK;
+	}
+
+	return drop_traffic(skb);
+}
+
 
 char LICENSE[] SEC("license") = "GPL";
 extern u32 LINUX_KERNEL_VERSION __kconfig;
