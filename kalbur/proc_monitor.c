@@ -33,6 +33,29 @@
 pthread_t listener;
 static struct thread_msg **threads;
 size_t thread_num;
+sig_atomic_t cleaning_up = 0;
+
+static void cleanup(int sig) {
+	int err;
+
+	if (cleaning_up) {
+		printf("cleanup: already cleaning up\n");
+		return;
+	}
+
+	cleaning_up = 1;
+
+	printf("cleanup: received signal %d\n", sig);
+	
+	err = cleanup_tc();
+	if (err) {
+		printf("cleanup: cleanup_tc failed\n");
+	}
+
+	fflush(stdout);
+	fflush(stderr);
+	exit(0);
+}
 
 /* Send wakeup signal to each sleeping thread
  * We wakeup each thread, because under high workloads
@@ -391,7 +414,7 @@ int main(int argc, char **argv)
 	int err;
 
 	/* Kill this process if parent dies */
-	err = prctl(PR_SET_PDEATHSIG, SIGKILL);
+	err = prctl(PR_SET_PDEATHSIG, SIGINT);
 	if (err != 0)
 		goto out;
 
@@ -435,6 +458,9 @@ int main(int argc, char **argv)
 	ctx = initialize_callback_ctx(head, counter);
 	if (ctx == NULL)
 		goto del_head;
+
+	// attach signal handler
+	signal(SIGINT, cleanup);
 
 	/* Initialize number of threads */
 	long num = sysconf(_SC_NPROCESSORS_CONF);

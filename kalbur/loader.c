@@ -90,7 +90,7 @@ static inline int populuate_prog_array(struct bpf_program *prog, int key,
 	fd = bpf_program__fd(prog);
 	table_fd = progfds[table_type];
 
-	err = bpf_map_update_elem(table_fd, &key, &fd, BPF_ANY);
+	err = bpf_map_update_elem(table_fd, &key, &fd, (unsigned long long)BPF_ANY);
 
 	return err;
 }
@@ -423,4 +423,40 @@ cleanup:
 	skel = NULL;
 out:
 	return NULL;
+}
+
+int cleanup_tc(void)
+{
+	int err = 0;
+	for(size_t i = 0; i < tc_hooks_count; i++) {
+		tc_hooks_ptr[i]->egress->opts.prog_fd = 0;
+		tc_hooks_ptr[i]->egress->opts.prog_id = 0;
+		printf("Detaching hooks for ifindex: %d\n", tc_hooks_ptr[i]->egress->hook.ifindex);
+		err = bpf_tc_detach(&tc_hooks_ptr[i]->egress->hook, &tc_hooks_ptr[i]->egress->opts);
+		if (err) {
+			fprintf(stderr, "Failed to detach tc egress hook for ifindex: %d\n", tc_hooks_ptr[i]->egress->hook.ifindex);
+		}
+
+		tc_hooks_ptr[i]->ingress->opts.prog_fd = 0;
+		tc_hooks_ptr[i]->ingress->opts.prog_id = 0;
+		err = bpf_tc_detach(&tc_hooks_ptr[i]->ingress->hook, &tc_hooks_ptr[i]->egress->opts);
+		if (err) {
+			fprintf(stderr, "Failed to detach tc ingress hook for ifindex: %d\n", tc_hooks_ptr[i]->ingress->hook.ifindex);
+		}
+
+		tc_hooks_ptr[i]->egress->hook.attach_point = BPF_TC_INGRESS | BPF_TC_EGRESS;
+		err = bpf_tc_hook_destroy(&tc_hooks_ptr[i]->egress->hook);
+		if (err) {
+			fprintf(stderr, "Failed to destroy tc hook for ifindex: %d\n", tc_hooks_ptr[i]->egress->hook.ifindex);
+		}
+
+		free(tc_hooks_ptr[i]->egress);
+		free(tc_hooks_ptr[i]->ingress);
+		free(tc_hooks_ptr[i]);
+	}
+
+	free(tc_hooks_ptr);
+
+	printf("exiting cleanup_tc\n");
+	return err;
 }
