@@ -107,9 +107,18 @@ struct lua_db *get_lua_db(lua_State *L)
 	return db;
 }
 
+/**
+ * @brief Sets the rule id of current lua script to the lua registry
+ * If the rule name is of format name scriptname_id.lua, then the id is set
+ * otherwise it is set to 0.
+ * Stack: [-0, +0]
+ * 
+ * @param L The lua state.
+ * @param rule_name The name of the rule.
+*/
 void setup_rule_context(lua_State *L, char *rule_name)
 {
-	int rule_id;
+	int rule_id = 0;
 	size_t rule_name_len;
 	int id_offset = 0;
 	ASSERT(L != NULL, "setup_rule_context: L == NULL");
@@ -123,9 +132,9 @@ void setup_rule_context(lua_State *L, char *rule_name)
 		}
 	}
 
-	ASSERT(id_offset > 0, "setup_rule_context: id_offset <= 0");
-	rule_id = atoi(rule_name + id_offset);
-	ASSERT(rule_id != 0, "setup_rule_context: rule_id == 0");
+	if (id_offset > 0) {
+		rule_id = atoi(rule_name + id_offset);
+	}
 
 	lua_pushstring(L, GLOBAL_RULE_ID);
 	lua_pushinteger(L, (long)rule_id);
