@@ -85,5 +85,5 @@ int select_stdout_by_stdin(sqlite3 *db, hashtable_t *ht, int *stdin_inode,
 int select_stdin_by_stdout(sqlite3 *db, hashtable_t *ht, int *stdout_inode,
 			   int *stdout_type, int *event_id, char **filename,
 			   int *filename_size);
-int select_variable_vals(sqlite3 *db, hashtable_t *ht, const char *variable_key, struct lua_variable_vals_array *variable_vals_arr);
+int select_variable_vals(sqlite3 *db, hashtable_t *ht, const char *variable_key, int rule_id, struct lua_variable_vals_array *variable_vals_arr);
 #endif // DATABASE_H

@@ -23,6 +23,7 @@ HELPERS_FN = $(UTIL_DIR)/helpers.o
 RULE_ENGINE = $(DATABASE_DIR)/database.o \
 			$(DATABASE_DIR)/rules.o \
 			$(ENGINE_DIR)/notifier.o \
+			$(ENGINE_DIR)/listener.o \
 			$(ENGINE_DIR)/engine.o \
 			$(ENGINE_DIR)/save_ms.o \
 			$(LUA_DIR)/lua_engine.o \

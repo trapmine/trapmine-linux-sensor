@@ -3,7 +3,7 @@ ROOT_DIR := .
 include $(ROOT_DIR)/Makefile.inc
 
 SENSOR_CORE := sensor-core
-VMLINUX_H := "vmlinux_5.4.0-90-generic.h"
+VMLINUX_H := "vmlinux_5.15.0-60-generic.h"
 
 ifeq ($(V),1)
 	Q =

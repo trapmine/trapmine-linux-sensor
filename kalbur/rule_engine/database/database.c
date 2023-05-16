@@ -2087,7 +2087,7 @@ out:
 	return err;
 }
 
-int select_variable_vals(sqlite3 *db, hashtable_t *ht, const char *variable_key, struct lua_variable_vals_array *variable_vals_arr)
+int select_variable_vals(sqlite3 *db, hashtable_t *ht, const char *variable_key, int rule_id, struct lua_variable_vals_array *variable_vals_arr)
 {
 	int err;
 	sqlite3_stmt *ppStmt;
@@ -2108,8 +2108,10 @@ int select_variable_vals(sqlite3 *db, hashtable_t *ht, const char *variable_key,
 	       "select_variable_vals: variable_vals_arr->values is NULL");
 	ASSERT(variable_vals_arr->size == 0,
 	       "select_variable_vals: variable_vals_arr is non-empty");
+	ASSERT(rule_id > 0, "select_variable_vals: rule_id is invalid");
 
 	SQLITE3_BIND_STR("select_variable_vals", text, VARIABLE_KEY, variable_key);
+	SQLITE3_BIND_INT("select_variable_vals", int, RULE_ID, rule_id);
 
 	while (true) {
 		err = sqlite3_step(ppStmt);

@@ -236,5 +236,6 @@
 #define VARIABLES_TABLE "variables"
 #define VARIABLE_VAL "variable_val"
 #define VARIABLE_KEY "variable_key"
+#define RULE_ID "rule_id"
 
 #endif // SCHEMA_H

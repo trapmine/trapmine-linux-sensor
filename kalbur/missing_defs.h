@@ -24,14 +24,6 @@
 #define IS_ERR_VALUE(x)                                                        \
 	((unsigned long)(void *)(x) >= (unsigned long)-MAX_ERRNO)
 
-/* include/uapi/linux/bpf.h */
-#define BPF_ANY 0UL /* create new element or update existing */
-#define BPF_NOEXIST 1UL /* create new element if it didn't exist */
-#define BPF_EXIST 2UL /* update existing element */
-#define BPF_F_INDEX_MASK 0xffffffffULL
-#define BPF_F_CURRENT_CPU BPF_F_INDEX_MASK
-#define BPF_F_FAST_STACK_CMP (1ULL << 9)
-
 /* include/uapi/linux/magic.h */
 #define TMPFS_MAGIC 0x01021994
 
@@ -79,4 +71,10 @@
 
 #define TOP_OF_KERNEL_STACK_PADDING 0
 
+#define ETH_P_IP 0x0800
+#define ETH_P_8021Q 0x8100
+#define ETH_P_8021AD 0x88A8
+
+#define TC_ACT_OK 0
+#define TC_ACT_SHOT 2
 #endif // MISSING_DEFS

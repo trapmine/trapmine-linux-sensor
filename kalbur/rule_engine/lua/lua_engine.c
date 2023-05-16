@@ -42,6 +42,9 @@ static void evaluate_rule_list(lua_State *L, struct rule_list *r)
 {
 	int err;
 	while (r != NULL) {
+		// set up rule context
+		setup_rule_context(L, r->script_name);
+
 		err = execute_bytecode(L, r->rule_bytecode, r->bytecode_sz,
 				       r->script_name);
 		if (err != CODE_SUCCESS) {
