@@ -331,6 +331,19 @@ BPF_ARRAY_MAP(network_isolation_whitelist_ips, u32, NETWORK_ISOLATION_WHITELIST_
 /* BPF map containing switch to network isolation*/
 BPF_HASH_MAP(network_isolation_switch, u32, u32, 1);
 
+
+struct process_creds_state {
+	uid_t ruid;
+	gid_t rgid;
+	uid_t euid;
+	gid_t egid;
+	uid_t suid;
+	gid_t sgid;
+};
+/* TODO: How many simultaneous processes we should support*/
+#define MAX_CONCURRENT_PROCESSES 10000
+BPF_HASH_MAP(process_credentials, u64, struct process_creds_state, MAX_CONCURRENT_PROCESSES);
+
 enum t_typename { TYPENAME_STRBUFF_T, TYPENAME_MMAP_BUFF_T };
 
 // ***************************************
@@ -1170,6 +1183,44 @@ save_credentials(struct cred *credentials, struct process_info *new_pinfo)
 	new_pinfo->credentials.egid = egid;
 out:
 	return err;
+}
+
+__attribute__((always_inline)) static long update_process_credentials()
+{
+	u64 tgid_pid;
+	struct task_struct *tsk;
+	struct cred *credentials;
+	uid_t ruid, euid, suid;
+	gid_t rgid, egid, sgid;
+	struct process_creds_state new_creds = { };
+	long err;
+
+	tgid_pid = bpf_get_current_pid_tgid();
+
+	tsk = (struct task_struct *)bpf_get_current_task();
+
+	// copy credentials
+	err = bpf_core_read(&credentials, sizeof(struct cred *), &(tsk->cred));
+	if (err < 0)
+		return err;
+
+	bpf_core_read(&ruid, sizeof(uid_t), &credentials->uid);
+	bpf_core_read(&rgid, sizeof(gid_t), &credentials->gid);
+	bpf_core_read(&euid, sizeof(uid_t), &credentials->euid);
+	bpf_core_read(&egid, sizeof(gid_t), &credentials->egid);
+	bpf_core_read(&suid, sizeof(uid_t), &credentials->suid);
+	bpf_core_read(&sgid, sizeof(gid_t), &credentials->sgid);
+
+	new_creds.ruid = ruid;
+	new_creds.euid = euid;
+	new_creds.suid = suid;
+	new_creds.rgid = rgid;
+	new_creds.egid = egid;
+	new_creds.sgid = sgid;
+
+	bpf_map_update_elem(&process_credentials, &tgid_pid, &new_creds, BPF_ANY);
+
+	return 0;
 }
 
 __attribute__((always_inline)) static long
@@ -2410,6 +2461,8 @@ int tracepoint__syscalls__sys_exit_execve(struct syscall_exit *ctx)
 	// get files on stdin, stdout, stderr
 	get_standard_pipes_inodes(&new_pinfo);
 
+	update_process_credentials();
+
 	// calculate numbers of proc_mmap struct being outputted
 	err = calc_mmap_cnt(emeta->wbuff);
 	JUMP_TARGET(handle_exit);
@@ -2445,6 +2498,8 @@ int tracepoint__sched__sched_process_exit(void *ctx)
 	tgid_pid = bpf_get_current_pid_tgid();
 
 	initialize_event_header(&ee.eh, tgid_pid, EXIT_EVENT);
+
+	bpf_map_delete_elem(&process_credentials, &tgid_pid);
 
 	err = bpf_perf_event_output(ctx, &streamer, BPF_F_CURRENT_CPU, &ee,
 				    sizeof(struct exit_event));
@@ -2670,6 +2725,8 @@ handle_fork_clone_exit(struct syscall_exit_fork_clone_ctx *ctx)
 
 		save_file_info(f, &new_pinfo.file);
 	}
+
+	update_process_credentials();
 
 	// emit process_info struct to userspace
 	err = bpf_perf_event_output(ctx, &streamer, BPF_F_CURRENT_CPU,
@@ -3028,37 +3085,6 @@ int tracepoint__syscalls__sys_exit_accept4(struct syscall_exit *ctx)
 	return 0;
 }
 
-/* The only purpose of the following tracepoints is to 
- * register events so that commit_creds call does not trigger
- * an alert. */
-SEC("tracepoint/syscalls/sys_enter_capset")
-int tracepoint__syscalls__capset(struct syscall_enter_ctx *ctx)
-{
-	generic_event_start_handler(ctx->id);
-	return 0;
-}
-
-SEC("tracepoint/syscalls/sys_exit_capset")
-int tracepoint__syscalls__sys_exit_capset(struct syscall_execve_ctx *ctx)
-{
-	generic_event_exit_handler(NULL);
-	return 0;
-}
-
-SEC("tracepoint/syscalls/sys_enter_unshare")
-int tracepoint__syscalls__unshare(struct syscall_enter_ctx *ctx)
-{
-	generic_event_start_handler(ctx->id);
-	return 0;
-}
-
-SEC("tracepoint/syscalls/sys_exit_unshare")
-int tracepoint__syscalls__sys_exit_unshare(struct syscall_execve_ctx *ctx)
-{
-	generic_event_exit_handler(NULL);
-	return 0;
-}
-/* */
 
 //#define KERN_STACKID_FLAGS (0 | BPF_F_FAST_STACK_CMP)
 //SEC("kprobe/commit_creds")
@@ -3377,6 +3403,145 @@ int tc_traffic_drop(struct __sk_buff *skb) {
 	return drop_traffic(skb);
 }
 
+SEC("tracepoint/syscalls/sys_exit_setuid")
+int tracepoint__syscall__sys_exit_setuid(struct syscall_exit *ctx)
+{
+	if (ctx->ret < 0)
+		goto out;
+
+	update_process_credentials();
+
+out:
+	return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_setgid")
+int tracepoint__syscall__sys_exit_setgid(struct syscall_exit *ctx)
+{
+	if (ctx->ret < 0)
+		goto out;
+
+	update_process_credentials();
+
+out:
+	return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_setreuid")
+int tracepoint__syscall__sys_exit_setreuid(struct syscall_exit *ctx)
+{
+	if (ctx->ret < 0)
+		goto out;
+
+	update_process_credentials();
+
+out:
+	return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_setregid")
+int tracepoint__syscall__sys_exit_setregid(struct syscall_exit *ctx)
+{
+	if (ctx->ret < 0)
+		goto out;
+
+	update_process_credentials();
+
+out:
+	return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_setresuid")
+int tracepoint__syscall__sys_exit_setresuid(struct syscall_exit *ctx)
+{
+	if (ctx->ret < 0)
+		goto out;
+
+	update_process_credentials();
+
+out:
+	return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_setresgid")
+int tracepoint__syscall__sys_exit_setresgid(struct syscall_exit *ctx)
+{
+	if (ctx->ret < 0)
+		goto out;
+
+	update_process_credentials();
+
+out:
+	return 0;
+}
+
+// TODO: Identify useful context information to be stored in the event.
+__attribute__((always_inline)) static void
+validate_process_credentials(struct syscall_enter_ctx *ctx)
+{
+	u64 tgid_pid;
+	struct task_struct *tsk;
+	struct cred *credentials;
+	uid_t ruid, euid, suid;
+	gid_t rgid, egid, sgid;
+	struct process_creds_state *stored_creds;
+	struct cfg_integrity cfg = { 0 };
+	u64 stack[2];
+	long err;
+
+	tgid_pid = bpf_get_current_pid_tgid();
+
+	tsk = (struct task_struct *)bpf_get_current_task();
+
+	// copy credentials
+	err = bpf_core_read(&credentials, sizeof(struct cred *), &(tsk->cred));
+	if (err < 0)
+		return;
+
+	bpf_core_read(&ruid, sizeof(uid_t), &credentials->uid);
+	bpf_core_read(&rgid, sizeof(gid_t), &credentials->gid);
+	bpf_core_read(&euid, sizeof(uid_t), &credentials->euid);
+	bpf_core_read(&egid, sizeof(gid_t), &credentials->egid);
+	bpf_core_read(&suid, sizeof(uid_t), &credentials->suid);
+	bpf_core_read(&sgid, sizeof(gid_t), &credentials->sgid);
+
+
+	stored_creds = (struct process_creds_state *)bpf_map_lookup_elem(&process_credentials, &tgid_pid);
+	if (stored_creds == 0) {
+		bpf_printk("validate_process_credentials: failed to lookup process_credentials[%llu]\n", tgid_pid);
+		return;
+	}
+
+	initialize_event_header(&cfg.eh, tgid_pid, LPE_COMMIT_CREDS);
+
+	// Get 32 stack addresses.
+	err = bpf_get_stack(ctx, stack, 2 * sizeof(u64), 0);
+	if (err < 0) {
+		bpf_printk("validate_process_credentials: failed to get stack\n");
+		return;
+	}
+
+	// TODO: (?) get syscall information from current->audit_context
+
+	cfg.caller_addr = stack[1];
+
+	if (stored_creds->ruid != ruid || stored_creds->rgid != rgid ||
+		stored_creds->euid != euid || stored_creds->egid != egid ||
+		stored_creds->suid != suid || stored_creds->sgid != sgid) {
+			bpf_perf_event_output(ctx, &streamer, BPF_F_CURRENT_CPU, &cfg,
+			      sizeof(struct cfg_integrity));
+			bpf_printk("validate_process_credentials: invalid credentials\n");
+			return;
+	}
+}
+
+// TODO: If it is too noisy, we should consider to place this hook in some specific syscalls.
+SEC("tracepoint/raw_syscalls/sys_enter")
+int tracepoint__raw_syscalls__sys_enter(struct syscall_enter_ctx *ctx)
+{
+	validate_process_credentials(ctx);
+	return 0;
+}
 
 char LICENSE[] SEC("license") = "GPL";
 extern u32 LINUX_KERNEL_VERSION __kconfig;
