@@ -12,6 +12,7 @@
 #define _GNU_SOURCE
 #include <sys/resource.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <consumer.h>
 #include <err.h>
@@ -26,11 +27,37 @@
 #include <safe_hash.h>
 #include <stdbool.h>
 #include <lua_engine.h>
+#include <proc_monitor.h>
 
 #define GARBAGE_COLLECT 5000
 
+pthread_t config_listener;
+pthread_t network_isolation_config_listener;
 static struct thread_msg **threads;
-size_t thread_num = 0;
+size_t thread_num;
+sig_atomic_t cleaning_up = 0;
+
+static void cleanup(int sig) {
+	int err;
+
+	if (cleaning_up) {
+		printf("cleanup: already cleaning up\n");
+		return;
+	}
+
+	cleaning_up = 1;
+
+	printf("cleanup: received signal %d\n", sig);
+	
+	err = cleanup_tc();
+	if (err) {
+		printf("cleanup: cleanup_tc failed\n");
+	}
+
+	fflush(stdout);
+	fflush(stderr);
+	exit(0);
+}
 
 /* Send wakeup signal to each sleeping thread
  * We wakeup each thread, because under high workloads
@@ -274,6 +301,16 @@ static void shutdown_threads(void)
 		}
 	}
 
+	err = pthread_join(config_listener, NULL);
+	if (err != 0) {
+		perror("handle_exit");
+	}
+
+	err = pthread_join(network_isolation_config_listener, NULL);
+	if (err != 0) {
+		perror("handle_exit");
+	}
+
 	return;
 }
 
@@ -351,6 +388,29 @@ static struct callback_ctx *initialize_callback_ctx(struct msg_list *head,
 	return ctx;
 }
 
+void handle_config(struct config_struct *config)
+{
+    struct rules_manager *manager;
+    struct rules_manager *old_manager;
+	struct lua_engine *engine;
+	struct lua_engine *old_engine;
+
+	// handle the config received
+	if (config->reload_rules) {
+		manager = init_rules_manager(RULES_FILE);
+		force_lock_threads();
+
+		old_manager = threads[0]->rule_engine->manager;
+		for(size_t i = 0; i < thread_num; i++) {
+			threads[i]->rule_engine->manager = manager;
+		}
+
+		free_rules_manager(old_manager);
+
+		unlock_threads();
+	}
+}
+
 int main(int argc, char **argv)
 {
 	struct proc_monitor_bpf *skel = NULL;
@@ -361,7 +421,7 @@ int main(int argc, char **argv)
 	int err;
 
 	/* Kill this process if parent dies */
-	err = prctl(PR_SET_PDEATHSIG, SIGKILL);
+	err = prctl(PR_SET_PDEATHSIG, SIGINT);
 	if (err != 0)
 		goto out;
 
@@ -406,6 +466,9 @@ int main(int argc, char **argv)
 	if (ctx == NULL)
 		goto del_head;
 
+	// attach signal handler
+	signal(SIGINT, cleanup);
+
 	/* Initialize number of threads */
 	long num = sysconf(_SC_NPROCESSORS_CONF);
 	if (num < 0) {
@@ -413,12 +476,19 @@ int main(int argc, char **argv)
 	}
 	thread_num = (size_t)(num / 2) + 1;
 
-	/* TEMPORARY */
-#define RULES_FILE "/opt/trapmine/rules/config.lua"
+	err = pthread_create(&config_listener, NULL, listen_config, NULL);
+	if (err != 0) {
+		goto del_head;
+	}
+
+	err = pthread_create(&network_isolation_config_listener, NULL, listen_network_isolation_config, NULL);
+	if (err != 0) {
+		goto del_head;
+	}
+
 	struct rules_manager *manager = init_rules_manager(RULES_FILE);
 	if (manager == NULL)
 		goto del_head;
-	/* */
 
 	/* Initialize threads */
 	err = initialize_thread_ls(head, manager);

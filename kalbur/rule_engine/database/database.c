@@ -46,42 +46,8 @@ static void delete_db_file(char *dbname)
 		goto out;                                                         \
 	}
 
-#define INSERT_COM_STMT(comm)                                                  \
-	"INSERT INTO disallowed(" COMM ") VALUES('" comm "');"
-
-typedef struct disallowed {
-	char *proc_name;
-} dis_t;
-
-const dis_t DISALLOWED[] = { { INSERT_COM_STMT("nginx") },
-			     { INSERT_COM_STMT("httpd") },
-			     { INSERT_COM_STMT("httpd-foregroun") },
-			     { INSERT_COM_STMT("lighttpd") },
-			     { INSERT_COM_STMT("apache") },
-			     { INSERT_COM_STMT("apache2") },
-			     { INSERT_COM_STMT("java") } };
-
-#define NUM_DISALLOWED (sizeof(DISALLOWED) / sizeof(DISALLOWED[0]))
-
-static void populate_disallowed(sqlite3 *db)
-{
-	int err;
-	char *err_msg;
-
-	for (unsigned int i = 0; i < NUM_DISALLOWED; i++) {
-		err = sqlite3_exec(db, DISALLOWED[i].proc_name, NULL, NULL,
-				   &err_msg);
-		if (err != SQLITE_OK) {
-			fprintf(stderr,
-				"SQL error during insert on disallowed '%s': %s\n",
-				DISALLOWED[i].proc_name, err_msg);
-		}
-	}
-}
-
 int initialize_database(char *dbname)
 {
-	struct stat sb;
 	sqlite3 *db;
 	int err;
 	char *err_msg;
@@ -90,11 +56,6 @@ int initialize_database(char *dbname)
 	if (!dbname) {
 		fprintf(stderr, "Invalid dbname. dbname cannot be NULL\n");
 		return CODE_FAILED;
-	}
-
-	// return success if db exists.
-	if (!stat(dbname, &sb)) {
-		return CODE_SUCCESS;
 	}
 
 	err = sqlite3_open(dbname, &db);
@@ -124,8 +85,6 @@ int initialize_database(char *dbname)
 	EXEC_PRAGMA(JOURNAL_MODE, db); // WAL mode is persistent
 	EXEC_PRAGMA(SYNCHRONOUS, db);
 	EXEC_PRAGMA(TEMP_STORE, db);
-
-	populate_disallowed(db);
 
 	err = CODE_SUCCESS;
 out:
@@ -2128,30 +2087,82 @@ out:
 	return err;
 }
 
-int select_comm_in_diasllowed(sqlite3 *db, hashtable_t *ht, const char *comm)
+int select_variable_vals(sqlite3 *db, hashtable_t *ht, const char *variable_key, int rule_id, struct lua_variable_vals_array *variable_vals_arr)
 {
 	int err;
 	sqlite3_stmt *ppStmt;
+	const unsigned char *variable_val;
+	int variable_val_len;
+	struct lua_variable_val **tmp_values;
 
-	ppStmt = hash_get(ht, SELECT_COMM, sizeof(SELECT_COMM));
+	ppStmt = hash_get(ht, SELECT_VARIABLE_VALS, sizeof(SELECT_VARIABLE_VALS));
 	if (ppStmt == NULL) {
 		fprintf(stderr,
-			"select_comm_in_diasllowed: Failed to acquire prepared statement from hashmap.\n");
+			"select_variable_vals: Failed to acquire prepared statement from hashmap.\n");
 		return CODE_FAILED;
 	}
 
-	SQLITE3_BIND_STR("insert_file_info", text, COMM, comm);
+	ASSERT(variable_vals_arr != NULL,
+	       "select_variable_vals: variable_vals_arr is NULL");
+	ASSERT(variable_vals_arr->values != NULL,
+	       "select_variable_vals: variable_vals_arr->values is NULL");
+	ASSERT(variable_vals_arr->size == 0,
+	       "select_variable_vals: variable_vals_arr is non-empty");
+	ASSERT(rule_id > 0, "select_variable_vals: rule_id is invalid");
 
-	err = sqlite3_step(ppStmt);
-	if (err != SQLITE_ROW) {
-		// if there is no row in result, we return false
-		err = 0;
-		goto out;
+	SQLITE3_BIND_STR("select_variable_vals", text, VARIABLE_KEY, variable_key);
+	SQLITE3_BIND_INT("select_variable_vals", int, RULE_ID, rule_id);
+
+	while (true) {
+		err = sqlite3_step(ppStmt);
+		if (err != SQLITE_ROW) {
+			break;
+		}
+		if (err == SQLITE_ROW) {
+
+			// TODO: change this
+			if (variable_vals_arr->size ==
+			    variable_vals_arr->max_size) {
+				variable_vals_arr->max_size +=
+					VARIABLE_VALS_CHUNK_SIZE;
+				tmp_values = realloc(
+					variable_vals_arr->values,
+					sizeof(struct lua_variable_val) *
+						(size_t)variable_vals_arr
+							->max_size);
+				if (tmp_values == NULL) {
+					fprintf(stderr,
+						"select_variable_vals: Failed to realloc memory for variable_vals_arr->values\n");
+					sqlite3_clear_bindings(ppStmt);
+					sqlite3_reset(ppStmt);
+					return CODE_FAILED;
+				}
+				variable_vals_arr->values = tmp_values;
+			}
+			variable_vals_arr->size += 1;
+			SQLITE3_GET(variable_val, text, 0);
+			variable_val_len =
+				(int)strlen((const char *)variable_val) + 1;
+
+			variable_vals_arr
+				->values[variable_vals_arr->size - 1] =
+				(struct lua_variable_val *)malloc(
+					sizeof(struct lua_variable_val));
+			variable_vals_arr
+				->values[variable_vals_arr->size - 1]->val =
+				(char *)malloc(
+				(sizeof(char) * (size_t)variable_val_len));
+
+			strlcpy(variable_vals_arr
+					->values[variable_vals_arr->size - 1]
+					->val,
+				(const char *)variable_val,
+				(size_t)variable_val_len);
+		}
 	}
 
-	// if there is row in result, comm matches some row in disallowed table, we return trues
-	err = 1;
-out:
+	err = err == SQLITE_DONE ? CODE_SUCCESS : CODE_FAILED;
+
 	sqlite3_clear_bindings(ppStmt);
 	sqlite3_reset(ppStmt);
 

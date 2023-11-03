@@ -28,7 +28,7 @@
 
 // Table definition
 #define EVENTS_TABLE                                                           \
-	"CREATE TABLE events( \
+	"CREATE TABLE IF NOT EXISTS events( \
 				" EVENT_ID " INTEGER PRIMARY KEY, \
 				" EVENT_TIME " UINT64_T NOT NULL, \
 				" TGID " UINT64_T NOT NULL, \
@@ -47,7 +47,7 @@
 
 // Table definition
 #define FILE_INFO_TABLE                                                        \
-	"CREATE TABLE file_info( \
+	"CREATE TABLE  IF NOT EXISTS file_info( \
 				" FILE_ID " INTEGER PRIMARY KEY, \
 				" FILENAME " TEXT, \
 				" INODE_NUMBER " UINT64_T NOT NULL, \
@@ -64,7 +64,7 @@
 
 // Table definition
 #define PROCESS_MMAP_TABLE                                                     \
-	"CREATE TABLE proc_mmap( \
+	"CREATE TABLE  IF NOT EXISTS proc_mmap( \
 				" EVENT_ID " INTEGER, \
 				" VM_BASE " UINT64_T, \
 				" VM_FLAGS " UINT64_T NOT NULL, \
@@ -98,7 +98,7 @@
 #define CLONE_FLAGS "clone_flags"
 
 #define PROCESS_INFO_TABLE                                                     \
-	"CREATE TABLE process_info(						\
+	"CREATE TABLE  IF NOT EXISTS process_info(						\
 		" EVENT_ID                                                     \
 	" INTEGER PRIMARY KEY, 				\
 		" PARENT_TGID                                                  \
@@ -150,7 +150,7 @@
 #define SOCK_TYPE "type"
 
 #define SOCKET_CREATE_TABLE                                                    \
-	"CREATE TABLE socket_create_info(\
+	"CREATE TABLE  IF NOT EXISTS socket_create_info(\
 				" EVENT_ID " INTEGER PRIMARY KEY,\
 				" INODE_NUMBER " UINT64_T,\
 				" FAMILY " TEXT,\
@@ -169,7 +169,7 @@
 #define SOCK_INODE "socket_inode"
 
 #define TCP_CONNECTION_TABLE                                                   \
-	"CREATE TABLE tcp_connection_info(\
+	"CREATE TABLE  IF NOT EXISTS tcp_connection_info(\
 				" EVENT_ID " INTEGER PRIMARY KEY, \
 				" TYPE " TEXT NOT NULL, \
 				" SADDR " TEXT, \
@@ -186,7 +186,7 @@
 #define CALLER_RET_ADDR "caller_ret_addr"
 #define TARGET_FUNC "target_func"
 #define LPE_TABLE                                                              \
-	"CREATE TABLE lpe(\
+	"CREATE TABLE  IF NOT EXISTS lpe(\
 			" EVENT_ID " INTEGER PRIMARY KEY, \
 			" CALLER_RET_ADDR " UINT64_T,\
 			" TARGET_FUNC " TEXT,\
@@ -201,7 +201,7 @@
 #define TARGET_PID "target_pid"
 
 #define PTRACE_TABLE                                                           \
-	"CREATE table ptrace_event(\
+	"CREATE table  IF NOT EXISTS ptrace_event(\
 			" EVENT_ID " INTEGER PRIMARY KEY, \
 			" REQUEST " UINT64_T,\
 			" ADDR " UINT64_T,\
@@ -211,15 +211,9 @@
 	")\
 			);"
 
-/* Disallowed parents for shell */
-#define DISALLOWED_TABLE                                                       \
-	"CREATE table disallowed(\
-				" COMM " TEXT NOT NULL\
-			);"
-
 /* Kernel module load */
 #define KERNEL_MODULE_LOAD_TABLE                                               \
-	"CREATE TABLE module_load(\
+	"CREATE TABLE  IF NOT EXISTS module_load(\
 				" EVENT_ID " INTEGER PRIMARY KEY, \
 				" FILE_ID " INTEGER, \
 				FOREIGN KEY(" EVENT_ID                         \
@@ -231,11 +225,17 @@
 /* Modprobe overwrite info */
 #define PATH_NAME "new_modprobe_path"
 #define MODPROBE_OVERWRITE_TABLE                                               \
-	"CREATE TABLE modprobe_overwrite_info(\
+	"CREATE TABLE  IF NOT EXISTS modprobe_overwrite_info(\
 				" EVENT_ID " INTEGER PRIMARY KEY, \
 				" PATH_NAME " TEXT,\
 				FOREIGN KEY(" EVENT_ID                         \
 	") REFERENCES events(" EVENT_ID ") \
 				);"
+
+/* variables table */
+#define VARIABLES_TABLE "variables"
+#define VARIABLE_VAL "variable_val"
+#define VARIABLE_KEY "variable_key"
+#define RULE_ID "rule_id"
 
 #endif // SCHEMA_H
